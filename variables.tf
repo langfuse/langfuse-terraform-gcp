@@ -62,3 +62,9 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "langfuse_chart_version" {
+  description = "Version of the Langfuse Helm chart to deploy"
+  type        = string
+  default     = "1.2.8"
+}

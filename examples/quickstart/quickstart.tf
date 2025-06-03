@@ -21,6 +21,9 @@ module "langfuse" {
   # Optional: Configure the cache
   cache_tier           = "STANDARD_HA"
   cache_memory_size_gb = 1
+
+  # Optional: Configure the Langfuse Helm chart version
+  langfuse_chart_version = "1.2.8"
 }
 
 provider "kubernetes" {

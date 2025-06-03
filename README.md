@@ -27,16 +27,19 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 
 ```hcl
 module "langfuse" {
-  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.0"
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.1"
 
   domain = "langfuse.example.com"
-  
+
   # Optional use a different name for your installation
   # e.g. when using the module multiple times on the same GCP project
   name   = "langfuse"
-  
+
   # Optional: Configure the VPC
   subnetwork_cidr = "10.0.0.0/16"
+
+  # Optional: Configure the Langfuse Helm chart version
+  langfuse_chart_version = "1.2.8"
 }
 
 provider "kubernetes" {
@@ -177,6 +180,7 @@ This module creates a complete Langfuse stack with the following components:
 | cache_tier                          | The service tier of the instance                                                               | string | "STANDARD_HA"           |    no    |
 | cache_memory_size_gb                | Redis memory size in GB                                                                        | number | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                       | bool   | true                    |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                   | string | "1.2.8"                 |    no    |
 
 ## Outputs
 
