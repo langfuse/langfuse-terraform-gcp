@@ -1,5 +1,7 @@
 locals {
   langfuse_values   = <<EOT
+${var.storage_class_name != null ? "global:\n  defaultStorageClass: ${var.storage_class_name}\n" : ""}
+
 langfuse:
   salt:
     secretKeyRef:

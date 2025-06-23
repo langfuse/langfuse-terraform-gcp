@@ -13,6 +13,13 @@ resource "google_storage_bucket" "langfuse" {
   versioning {
     enabled = true
   }
+
+  dynamic "encryption" {
+    for_each = var.customer_managed_encryption_key != null ? [1] : []
+    content {
+      default_kms_key_name = var.customer_managed_encryption_key
+    }
+  }
 }
 
 # Allow all access on bucket for langfuse user

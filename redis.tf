@@ -7,6 +7,7 @@ resource "google_redis_instance" "this" {
   connect_mode       = "PRIVATE_SERVICE_ACCESS"
   transit_encryption_mode = "SERVER_AUTHENTICATION"
   display_name = "${local.tag_name} Redis Instance"
+  customer_managed_key = var.customer_managed_encryption_key
 
   auth_enabled = true
 

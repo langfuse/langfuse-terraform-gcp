@@ -78,7 +78,7 @@ terraform apply
 
 5. Start using Langfuse by navigating to `https://<domain>` in your browser.
 
-### Known issues
+## Known issues
 
 1. Getting an `ERR_SSL_VERSION_OR_CIPHER_MISMATCH` error after installation on the HTTPS endpoint.
 
@@ -124,6 +124,74 @@ This module creates a complete Langfuse stack with the following components:
 | kubernetes  | >= 2.10 |
 | helm        | >= 2.5  |
 
+## Customer-Managed Encryption Keys (CMEK)
+
+This module supports customer-managed encryption keys (CMEK) for enhanced security.
+When enabled, your encryption keys are managed by you using Google Cloud KMS, providing additional control over data encryption.
+
+### Supported Resources
+
+The following resources support CMEK when the `customer_managed_encryption_key` variable is provided:
+
+- **Cloud Storage bucket** - Encrypts all stored objects (media uploads, exports, events)
+- **Cloud SQL PostgreSQL instance** - Encrypts database data at rest
+- **Redis instance** - Encrypts cache data at rest
+- **GKE cluster** - Encrypts etcd data (Kubernetes secrets and configuration)
+- **ClickHouse persistent volumes** - Encrypts ClickHouse data when using a CMEK-protected storage class
+
+It is important that the respective service accounts have the necessary permissions to use the KMS key.
+Please consult the Google Cloud documentation for further details.
+
+### Prerequisites
+
+Before using CMEK, you need to:
+
+1. Create a Cloud KMS key ring and crypto key in your project
+2. Grant the necessary IAM permissions to Google Cloud services to use the key
+3. Ensure the key is in the same region as your Langfuse deployment
+4. Create a custom storage class for ClickHouse persistent volumes (if using CMEK)
+
+### ClickHouse Persistent Volume Encryption
+
+ClickHouse uses persistent volumes for data storage. To ensure ClickHouse data is encrypted with your CMEK, you need to create a custom storage class and configure the module to use it.
+
+#### Creating a CMEK-Protected Storage Class
+
+1. **Create the storage class YAML file** (`cmek-storage-class.yaml`):
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cmek-storage-class
+provisioner: pd.csi.storage.gke.io
+volumeBindingMode: "WaitForFirstConsumer"
+allowVolumeExpansion: true
+parameters:
+  type: pd-ssd
+  disk-encryption-kms-key: projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[RING_NAME]/cryptoKeys/[KEY_NAME]
+```
+
+2. **Apply the storage class to your cluster**:
+
+```bash
+kubectl apply -f cmek-storage-class.yaml
+```
+
+3. **Configure the Langfuse module to use the custom storage class**:
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.2"
+
+  domain = "langfuse.example.com"
+  customer_managed_encryption_key = google_kms_crypto_key.langfuse.id
+  storage_class_name = "cmek-storage-class"
+}
+```
+
+**Important**: The storage class must be created **before** deploying the Langfuse module, as ClickHouse will need it during initial deployment.
+
 ## Providers
 
 | Name        | Version |
@@ -167,20 +235,22 @@ This module creates a complete Langfuse stack with the following components:
 
 ## Inputs
 
-| Name                                | Description                                                                                    | Type   | Default                 | Required |
-|-------------------------------------|------------------------------------------------------------------------------------------------|--------|-------------------------|:--------:|
-| name                                | Name to use for or prefix resources with                                                       | string | "langfuse"              |    no    |
-| domain                              | Domain name used to host langfuse on (e.g., langfuse.company.com)                              | string | n/a                     |   yes    |
-| use_encryption_key                  | Wheter or not to use an Encryption key for LLM API credential and integration credential store | bool   | true                    |    no    |
-| kubernetes_namespace                | Namespace to deploy langfuse to                                                                | string | "langfuse"              |    no    |
-| subnetwork_cidr                     | CIDR block for Subnetwork                                                                      | string | "10.0.0.0/16"           |    no    |
-| database_instance_tier              | The machine type to use for the database instance                                              | string | "db-perf-optimized-N-2" |    no    |
-| database_instance_edition           | The edition to use for the database instance                                                   | string | "ENTERPRISE_PLUS"       |    no    |
-| database_instance_availability_type | The availability type to use for the database instance                                         | string | "REGIONAL"              |    no    |
-| cache_tier                          | The service tier of the instance                                                               | string | "STANDARD_HA"           |    no    |
-| cache_memory_size_gb                | Redis memory size in GB                                                                        | number | 1                       |    no    |
-| deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                       | bool   | true                    |    no    |
-| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                   | string | "1.2.15"                 |    no    |
+| Name                                | Description                                                                                                                                                                                                                                                                                       | Type   | Default                 | Required |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-------------------------|:--------:|
+| name                                | Name to use for or prefix resources with                                                                                                                                                                                                                                                          | string | "langfuse"              |    no    |
+| domain                              | Domain name used to host langfuse on (e.g., langfuse.company.com)                                                                                                                                                                                                                                 | string | n/a                     |   yes    |
+| use_encryption_key                  | Wheter or not to use an Encryption key for LLM API credential and integration credential store                                                                                                                                                                                                    | bool   | true                    |    no    |
+| kubernetes_namespace                | Namespace to deploy langfuse to                                                                                                                                                                                                                                                                   | string | "langfuse"              |    no    |
+| subnetwork_cidr                     | CIDR block for Subnetwork                                                                                                                                                                                                                                                                         | string | "10.0.0.0/16"           |    no    |
+| database_instance_tier              | The machine type to use for the database instance                                                                                                                                                                                                                                                 | string | "db-perf-optimized-N-2" |    no    |
+| database_instance_edition           | The edition to use for the database instance                                                                                                                                                                                                                                                      | string | "ENTERPRISE_PLUS"       |    no    |
+| database_instance_availability_type | The availability type to use for the database instance                                                                                                                                                                                                                                            | string | "REGIONAL"              |    no    |
+| cache_tier                          | The service tier of the instance                                                                                                                                                                                                                                                                  | string | "STANDARD_HA"           |    no    |
+| cache_memory_size_gb                | Redis memory size in GB                                                                                                                                                                                                                                                                           | number | 1                       |    no    |
+| deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                                                                                                          | bool   | true                    |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                                                                                                                      | string | "1.2.15"                |    no    |
+| customer_managed_encryption_key     | The Cloud KMS key name to use for customer-managed encryption across all supported resources (Cloud Storage, Cloud SQL, Redis, GKE). Format: projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[RING_NAME]/cryptoKeys/[KEY_NAME]. If not provided, Google-managed encryption keys will be used. | string | null                    |    no    |
+| storage_class_name                  | Name of the Kubernetes storage class to use for ClickHouse persistent volumes. When using customer-managed encryption keys, you should create a custom storage class with CMEK configuration and provide its name here. If not provided, the cluster's default storage class will be used.        | string | null                    |    no    |
 
 ## Outputs
 
