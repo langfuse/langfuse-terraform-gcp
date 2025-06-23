@@ -24,6 +24,14 @@ module "langfuse" {
 
   # Optional: Configure the Langfuse Helm chart version
   langfuse_chart_version = "1.2.15"
+
+  # Optional: Use customer-managed encryption keys for enhanced security
+  # Uncomment and provide your KMS key to enable CMEK
+  # customer_managed_encryption_key = "projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"
+
+  # Optional: Use a custom storage class for ClickHouse persistent volumes
+  # Required when using CMEK to ensure ClickHouse data is encrypted
+  # storage_class_name = "cmek-storage-class"
 }
 
 provider "kubernetes" {

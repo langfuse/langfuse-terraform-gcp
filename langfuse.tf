@@ -40,7 +40,7 @@ postgresql:
 clickhouse:
   auth:
     existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
-    existingSecretKey: clickhouse-password
+    existingSecretKey: clickhouse-password${var.storage_class_name != null ? "\n  persistence:\n    storageClass: ${var.storage_class_name}" : ""}
 redis:
   deploy: false
   host: ${google_redis_instance.this.host}

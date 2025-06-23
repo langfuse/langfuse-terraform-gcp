@@ -40,6 +40,9 @@ module "langfuse" {
 
   # Optional: Configure the Langfuse Helm chart version
   langfuse_chart_version = "1.2.15"
+
+  # Optional: Use customer-managed encryption keys for enhanced security
+  # customer_managed_encryption_key = "projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"
 }
 
 provider "kubernetes" {
@@ -77,6 +80,179 @@ terraform apply
 ```
 
 5. Start using Langfuse by navigating to `https://<domain>` in your browser.
+
+## Customer-Managed Encryption Keys (CMEK)
+
+This module supports customer-managed encryption keys (CMEK) for enhanced security. When enabled, your encryption keys are managed by you using Google Cloud KMS, providing additional control over data encryption.
+
+### Supported Resources
+
+The following resources support CMEK when the `customer_managed_encryption_key` variable is provided:
+
+- **Cloud Storage bucket** - Encrypts all stored objects (media uploads, exports, events)
+- **Cloud SQL PostgreSQL instance** - Encrypts database data at rest
+- **Redis instance** - Encrypts cache data at rest
+- **GKE cluster** - Encrypts etcd data (Kubernetes secrets and configuration)
+- **ClickHouse persistent volumes** - Encrypts ClickHouse data when using a CMEK-protected storage class
+
+### Required IAM Permissions
+
+The following service accounts need the `roles/cloudkms.cryptoKeyEncrypterDecrypter` role on your KMS key:
+
+- `service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com` (for GKE, Redis, and persistent disks)
+- `service-PROJECT_NUMBER@gcp-sa-cloud-sql.iam.gserviceaccount.com` (for Cloud SQL)
+- `service-PROJECT_NUMBER@gs-project-accounts.iam.gserviceaccount.com` (for Cloud Storage)
+
+### Prerequisites
+
+Before using CMEK, you need to:
+
+1. Create a Cloud KMS key ring and crypto key in your project
+2. Grant the necessary IAM permissions to Google Cloud services to use the key
+3. Ensure the key is in the same region as your Langfuse deployment
+4. Create a custom storage class for ClickHouse persistent volumes (if using CMEK)
+
+### Deployment Order
+
+When using CMEK, follow this deployment order:
+
+1. **Deploy KMS resources and IAM bindings** first
+2. **Deploy the GKE cluster** (this will create the cluster with CMEK-encrypted etcd)
+3. **Create the CMEK-protected storage class** on the cluster
+4. **Deploy the Langfuse module** with the storage class configuration
+
+### Example with CMEK
+
+```hcl
+# First, create the KMS resources
+resource "google_kms_key_ring" "langfuse" {
+  name     = "langfuse-keyring"
+  location = "us-central1"
+}
+
+resource "google_kms_crypto_key" "langfuse" {
+  name     = "langfuse-key"
+  key_ring = google_kms_key_ring.langfuse.id
+  purpose  = "ENCRYPT_DECRYPT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Grant necessary permissions for all services
+data "google_project" "current" {}
+
+# Cloud SQL service account
+resource "google_kms_crypto_key_iam_binding" "sql_service_account" {
+  crypto_key_id = google_kms_crypto_key.langfuse.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  members = [
+    "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloud-sql.iam.gserviceaccount.com",
+  ]
+}
+
+# Compute Engine service account (for GKE, Redis, and persistent disks)
+resource "google_kms_crypto_key_iam_binding" "compute_service_account" {
+  crypto_key_id = google_kms_crypto_key.langfuse.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  members = [
+    "serviceAccount:service-${data.google_project.current.number}@compute-system.iam.gserviceaccount.com",
+  ]
+}
+
+# Cloud Storage service account
+resource "google_kms_crypto_key_iam_binding" "storage_service_account" {
+  crypto_key_id = google_kms_crypto_key.langfuse.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  members = [
+    "serviceAccount:service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com",
+  ]
+}
+
+# Create CMEK-protected storage class for ClickHouse
+resource "kubernetes_storage_class" "cmek_storage_class" {
+  metadata {
+    name = "cmek-storage-class"
+  }
+
+  storage_provisioner    = "pd.csi.storage.gke.io"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+
+  parameters = {
+    type                     = "pd-ssd"
+    disk-encryption-kms-key = google_kms_crypto_key.langfuse.id
+  }
+
+  depends_on = [
+    google_kms_crypto_key_iam_binding.compute_service_account
+  ]
+}
+
+# Use the key with Langfuse module
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.2"
+
+  domain = "langfuse.example.com"
+  customer_managed_encryption_key = google_kms_crypto_key.langfuse.id
+  storage_class_name = kubernetes_storage_class.cmek_storage_class.metadata[0].name
+
+  depends_on = [
+    kubernetes_storage_class.cmek_storage_class
+  ]
+}
+```
+
+### ClickHouse Persistent Volume Encryption
+
+ClickHouse uses persistent volumes for data storage. To ensure ClickHouse data is encrypted with your CMEK, you need to create a custom storage class and configure the module to use it.
+
+#### Creating a CMEK-Protected Storage Class
+
+1. **Create the storage class YAML file** (`cmek-storage-class.yaml`):
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cmek-storage-class
+provisioner: pd.csi.storage.gke.io
+volumeBindingMode: "WaitForFirstConsumer"
+allowVolumeExpansion: true
+parameters:
+  type: pd-ssd
+  disk-encryption-kms-key: projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[RING_NAME]/cryptoKeys/[KEY_NAME]
+```
+
+2. **Apply the storage class to your cluster**:
+
+```bash
+kubectl apply -f cmek-storage-class.yaml
+```
+
+3. **Configure the Langfuse module to use the custom storage class**:
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.2"
+
+  domain = "langfuse.example.com"
+  customer_managed_encryption_key = google_kms_crypto_key.langfuse.id
+  storage_class_name = "cmek-storage-class"
+}
+```
+
+**Important**: The storage class must be created **before** deploying the Langfuse module, as ClickHouse will need it during initial deployment.
+
+### Security Considerations
+
+- **Key Management**: You are responsible for managing the lifecycle of your encryption keys
+- **Access Control**: Ensure proper IAM policies are in place to control key access
+- **Backup**: Consider key backup and recovery procedures
+- **Compliance**: CMEK helps meet compliance requirements for data encryption
+- **Performance**: CMEK may have minimal performance impact compared to Google-managed keys
+- **Storage Class**: When using CMEK, create a custom storage class for ClickHouse persistent volumes to ensure complete encryption coverage
 
 ### Known issues
 
@@ -181,6 +357,8 @@ This module creates a complete Langfuse stack with the following components:
 | cache_memory_size_gb                | Redis memory size in GB                                                                        | number | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                       | bool   | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                   | string | "1.2.15"                 |    no    |
+| customer_managed_encryption_key     | The Cloud KMS key name to use for customer-managed encryption across all supported resources (Cloud Storage, Cloud SQL, Redis, GKE). Format: projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[RING_NAME]/cryptoKeys/[KEY_NAME]. If not provided, Google-managed encryption keys will be used. | string | null                    |    no    |
+| storage_class_name                  | Name of the Kubernetes storage class to use for ClickHouse persistent volumes. When using customer-managed encryption keys, you should create a custom storage class with CMEK configuration and provide its name here. If not provided, the cluster's default storage class will be used. | string | null                    |    no    |
 
 ## Outputs
 

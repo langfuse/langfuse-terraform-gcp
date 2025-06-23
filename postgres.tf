@@ -2,6 +2,7 @@ resource "google_sql_database_instance" "this" {
   name             = var.name
   region           = data.google_client_config.current.region
   database_version = "POSTGRES_15"
+  encryption_key_name = var.customer_managed_encryption_key
 
   settings {
     tier                        = var.database_instance_tier
