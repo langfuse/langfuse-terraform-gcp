@@ -1,5 +1,7 @@
 locals {
   langfuse_values   = <<EOT
+${var.storage_class_name != null ? "global:\n  defaultStorageClass: ${var.storage_class_name}\n" : ""}
+
 langfuse:
   salt:
     secretKeyRef:
@@ -40,7 +42,7 @@ postgresql:
 clickhouse:
   auth:
     existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
-    existingSecretKey: clickhouse-password${var.storage_class_name != null ? "\n  persistence:\n    storageClass: ${var.storage_class_name}" : ""}
+    existingSecretKey: clickhouse-password
 redis:
   deploy: false
   host: ${google_redis_instance.this.host}
