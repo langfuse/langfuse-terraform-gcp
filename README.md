@@ -127,7 +127,7 @@ The module supports injecting custom environment variables into the Langfuse con
 
 ```hcl
 module "langfuse" {
-  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.2"
+  source = "github.com/langfuse/langfuse-terraform-gcp"
 
   domain = "langfuse.example.com"
 
