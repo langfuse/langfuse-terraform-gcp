@@ -11,16 +11,9 @@ module "langfuse" {
   additional_env = [
     # Direct value example
     {
-      name  = "CUSTOM_FEATURE_FLAG"
-      value = "enabled"
-    },
-    
-    # Another direct value example
-    {
-      name  = "LOG_LEVEL"
+      name  = "LANGFUSE_LOG_LEVEL"
       value = "info"
     },
-    
     # Secret reference example
     {
       name = "DATABASE_PASSWORD"
@@ -31,71 +24,16 @@ module "langfuse" {
         }
       }
     },
-    
-    # Secret reference with optional flag
-    {
-      name = "OPTIONAL_API_KEY"
-      valueFrom = {
-        secretKeyRef = {
-          name     = "optional-secrets"
-          key      = "api-key"
-          optional = true
-        }
-      }
-    },
-    
     # ConfigMap reference example
     {
-      name = "APP_CONFIG"
+      name = "LANGFUSE_LOG_FORMAT"
       valueFrom = {
         configMapKeyRef = {
           name = "app-config"
-          key  = "config.json"
+          key  = "log-format"
         }
       }
     },
-    
-    # Field reference example (Pod metadata)
-    {
-      name = "POD_NAME"
-      valueFrom = {
-        fieldRef = {
-          fieldPath = "metadata.name"
-        }
-      }
-    },
-    
-    # Field reference example (Pod IP)
-    {
-      name = "POD_IP"
-      valueFrom = {
-        fieldRef = {
-          fieldPath = "status.podIP"
-        }
-      }
-    },
-    
-    # Resource field reference example (CPU limit)
-    {
-      name = "CPU_LIMIT"
-      valueFrom = {
-        resourceFieldRef = {
-          resource = "limits.cpu"
-        }
-      }
-    },
-    
-    # Resource field reference example (Memory request)
-    {
-      name = "MEMORY_REQUEST"
-      valueFrom = {
-        resourceFieldRef = {
-          resource      = "requests.memory"
-          containerName = "langfuse"
-          divisor       = "1Mi"
-        }
-      }
-    }
   ]
 }
 
@@ -119,16 +57,7 @@ resource "kubernetes_config_map" "app_config" {
   }
 
   data = {
-    "config.json" = jsonencode({
-      feature_flags = {
-        new_ui = true
-        beta_features = false
-      }
-      timeouts = {
-        request = "30s"
-        connection = "10s"
-      }
-    })
+    "log-format": "json"
   }
 }
 
