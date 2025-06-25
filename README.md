@@ -114,6 +114,57 @@ This module creates a complete Langfuse stack with the following components:
 - GKE Ingress Controller for ingress
 - Filestore CSI Driver for persistent storage
 
+## Additional Environment Variables
+
+The module supports injecting custom environment variables into the Langfuse container through the `additional_env` parameter. This feature supports both direct values and Kubernetes `valueFrom` references, allowing you to:
+
+- Set feature flags and configuration values
+- Reference secrets for sensitive data
+- Reference ConfigMaps for configuration files
+- Access Pod metadata and resource information
+
+### Basic Usage
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.1.2"
+
+  domain = "langfuse.example.com"
+
+  additional_env = [
+    # Direct value
+    {
+      name  = "LOG_LEVEL"
+      value = "debug"
+    },
+
+    # Secret reference
+    {
+      name = "API_KEY"
+      valueFrom = {
+        secretKeyRef = {
+          name = "my-secrets"
+          key  = "api-key"
+        }
+      }
+    },
+
+    # ConfigMap reference
+    {
+      name = "CONFIG_FILE"
+      valueFrom = {
+        configMapKeyRef = {
+          name = "app-config"
+          key  = "config.json"
+        }
+      }
+    }
+  ]
+}
+```
+
+For comprehensive examples including field references and resource field references, see the [additional-env example](examples/additional-env/).
+
 ## Requirements
 
 | Name        | Version |
@@ -181,6 +232,9 @@ This module creates a complete Langfuse stack with the following components:
 | cache_memory_size_gb                | Redis memory size in GB                                                                        | number | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                       | bool   | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                   | string | "1.2.15"                 |    no    |
+| additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps, fieldRef, resourceFieldRef). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
+| customer_managed_encryption_key     | The Cloud KMS key name to use for customer-managed encryption across all supported resources (Cloud Storage, Cloud SQL, Redis, GKE). Format: projects/[PROJECT_ID]/locations/[LOCATION]/keyRings/[RING_NAME]/cryptoKeys/[KEY_NAME]. If not provided, Google-managed encryption keys will be used. | string | null                    |    no    |
+| storage_class_name                  | Name of the Kubernetes storage class to use for ClickHouse persistent volumes. When using customer-managed encryption keys, you should create a custom storage class with CMEK configuration and provide its name here. If not provided, the cluster's default storage class will be used. | string | null                    |    no    |
 
 ## Outputs
 

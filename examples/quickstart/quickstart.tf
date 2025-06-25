@@ -24,6 +24,14 @@ module "langfuse" {
 
   # Optional: Configure the Langfuse Helm chart version
   langfuse_chart_version = "1.2.15"
+
+  # Optional: Add custom environment variables
+  # additional_env = [
+  #   {
+  #     name  = "LOG_LEVEL"
+  #     value = "info"
+  #   }
+  # ]
 }
 
 provider "kubernetes" {
