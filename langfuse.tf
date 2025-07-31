@@ -28,34 +28,11 @@ langfuse:
         secretKeyRef:
           name: ${env.valueFrom.secretKeyRef.name}
           key: ${env.valueFrom.secretKeyRef.key}
-%{ if env.valueFrom.secretKeyRef.optional != null ~}
-          optional: ${env.valueFrom.secretKeyRef.optional}
-%{ endif ~}
 %{ endif ~}
 %{ if env.valueFrom.configMapKeyRef != null ~}
         configMapKeyRef:
           name: ${env.valueFrom.configMapKeyRef.name}
           key: ${env.valueFrom.configMapKeyRef.key}
-%{ if env.valueFrom.configMapKeyRef.optional != null ~}
-          optional: ${env.valueFrom.configMapKeyRef.optional}
-%{ endif ~}
-%{ endif ~}
-%{ if env.valueFrom.fieldRef != null ~}
-        fieldRef:
-          fieldPath: ${env.valueFrom.fieldRef.fieldPath}
-%{ if env.valueFrom.fieldRef.apiVersion != null ~}
-          apiVersion: ${env.valueFrom.fieldRef.apiVersion}
-%{ endif ~}
-%{ endif ~}
-%{ if env.valueFrom.resourceFieldRef != null ~}
-        resourceFieldRef:
-          resource: ${env.valueFrom.resourceFieldRef.resource}
-%{ if env.valueFrom.resourceFieldRef.containerName != null ~}
-          containerName: ${env.valueFrom.resourceFieldRef.containerName}
-%{ endif ~}
-%{ if env.valueFrom.resourceFieldRef.divisor != null ~}
-          divisor: ${env.valueFrom.resourceFieldRef.divisor}
-%{ endif ~}
 %{ endif ~}
 %{ endif ~}
 %{ endfor ~}

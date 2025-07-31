@@ -70,7 +70,7 @@ variable "langfuse_chart_version" {
 }
 
 variable "additional_env" {
-  description = "Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps, fieldRef, resourceFieldRef)."
+  description = "Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps)."
   type = list(object({
     name = string
     # Direct value (mutually exclusive with valueFrom)
@@ -81,24 +81,11 @@ variable "additional_env" {
       secretKeyRef = optional(object({
         name = string
         key  = string
-        optional = optional(bool)
       }))
       # Reference to a ConfigMap key
       configMapKeyRef = optional(object({
         name = string
         key  = string
-        optional = optional(bool)
-      }))
-      # Reference to a field in the Pod spec
-      fieldRef = optional(object({
-        fieldPath = string
-        apiVersion = optional(string)
-      }))
-      # Reference to a resource field
-      resourceFieldRef = optional(object({
-        resource = string
-        containerName = optional(string)
-        divisor = optional(string)
       }))
     }))
   }))
