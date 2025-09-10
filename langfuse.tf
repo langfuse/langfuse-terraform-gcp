@@ -155,8 +155,6 @@ resource "kubernetes_secret" "langfuse" {
     "salt"                = random_bytes.salt.base64
     "nextauth-secret"     = random_bytes.nextauth_secret.base64
     "clickhouse-password" = random_password.clickhouse_password.result
-    "storage_access_id"   = google_storage_hmac_key.langfuse.access_id
-    "storage_secret"      = google_storage_hmac_key.langfuse.secret
     "encryption_key"      = var.use_encryption_key ? random_bytes.encryption_key[0].hex : ""
   }
 }
