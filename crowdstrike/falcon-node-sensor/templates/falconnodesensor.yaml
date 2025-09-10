@@ -1,0 +1,15 @@
+---
+apiVersion: falcon.crowdstrike.com/v1alpha1
+kind: FalconNodeSensor
+metadata:
+  name: falcon-node-sensor
+spec:
+  falcon_api:
+    client_id: {{ .Values.crowdstrikeConfig.clientID }}
+    client_secret: {{ .Values.crowdstrikeConfig.clientSecret }}
+    cloud_region: autodiscover
+  falcon:
+    trace: none
+    tags:
+      - {{ .Values.crowdstrikeConfig.clusterName }}
+      - daemonset

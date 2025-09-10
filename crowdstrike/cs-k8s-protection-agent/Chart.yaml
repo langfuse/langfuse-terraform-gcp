@@ -1,0 +1,7 @@
+apiVersion: v2
+appVersion: 0.1473.0
+description: A Helm chart for Crowdstrike Kubernetes Protection Agent
+icon: https://www.crowdstrike.com/wp-content/uploads/2020/08/FalconPremium@2x.svg
+name: cs-k8s-protection-agent
+type: application
+version: 0.1473.0

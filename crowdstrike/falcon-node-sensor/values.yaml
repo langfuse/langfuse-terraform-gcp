@@ -1,0 +1,6 @@
+---
+
+crowdstrikeConfig:
+  clusterName: ""
+  clientID: ""
+  clientSecret: ""

@@ -32,6 +32,26 @@ resource "google_iap_web_iam_member" "zc-group-iap-binding" {
   member = "serviceAccount:${data.google_service_account.zc-tiger-sa.email}"
 }
 
+#BUILD_PROJECT="zac-01-pp-d"
+#
+#cluster="zac-dev"
+#project_id="zac-01-pp-d"
+#cluster_zones="us-east1"
+#region="us-east1"
+
+module "crowdstrike" {
+  source = "../../crowdstrike"
+#  ar_region             = var.ar_region
+#  ar_repo               = var.artifact_repository_id
+  cluster               = "langfuse"
+  cluster_zones         = "us-east1"
+#  depends_on            = [ module.langfuse ]
+  project_id            = local.gcp_project
+  build_project_id      = local.dev_gcp_project
+  tier                  = "dev"
+  region                = "us-east1"
+}
+
 module "langfuse" {
   source = "../.."
 

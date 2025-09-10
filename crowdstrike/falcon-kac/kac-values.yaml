@@ -1,0 +1,164 @@
+# Default values for falcon-kac.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+image:
+  repository: falcon-kac
+  pullPolicy: Always
+
+  # These two values could be set if using registry with authentication
+  pullSecrets:
+  # Value must be base64. This setting conflicts with image.pullSecrets
+  # The base64 encoded string of the docker config json for the pull secret can be
+  # gotten through:
+  # $ cat ~/.docker/config.json | base64 -w 0
+  registryConfigJSON:
+
+  # Overrides the image tag. In general, tags should not be used (including semver tags or `latest`). This variable is provided for those
+  # who have yet to move off of using tags. The sha256 digest should be used in place of tags for increased security and image immutability.
+  tag: latest
+  # Setting a digest will override any tag and should be used instead of tags.
+  #
+  # Example digest variable configuration:
+  # digest: sha256:ffdc91f66ef8570bd7612cf19145563a787f552656f5eec43cd80ef9caca0398
+  digest:
+
+# Configure the number of replicas for the validation webhook backend
+# Not supported now will be used in future
+replicas: 1
+
+# Configure the webhook Port
+webhookPort: 4443
+
+# Configure the watcher Port
+watcherPort: 4080
+
+# Auto update the certificates every time there is an update
+autoCertificateUpdate: true
+
+# Certificate validity duration in number of days
+certExpiration: 3650
+
+# For custom DNS configurations when .svc requires a domain for services
+# For example if service.my-namespace.svc doesn't resolve and the cluster uses
+# service.my-namespace.svc.testing.io, you would add testing.io as the value below.
+# Otherwise, keep this blank.
+domainName:
+
+serviceAccount:
+  name: falcon-kac-sa
+  annotations: {}
+
+falcon:
+  cid:
+  apd:
+  aph:
+  app:
+  trace: none
+  feature:
+  billing:
+  tags:
+  provisioning_token:
+
+# These variables can be used to customize the way KAC provides visibility into
+# resources on your Kubernetes cluster. The variables are initially set to the
+# default values which will be used if they are commented out.
+clusterVisibility:
+  # KAC snapshots Kubernetes resources on a periodic basis and sends them to CrowdStrike
+  # cloud. This enables long living resources to be maintained in CrowdStrike cloud databases.
+  resourceSnapshots:
+    # If set to false, the snapshots are not taken and you may not see long lived
+    # Kubernetes resources in Falcon UI after about 7 days.
+    enabled: true
+    # The time interval between periodic snapshots. The default value of 22 hours is
+    # also the maximum value allowed. Minimum allowed value is 30 minutes. The format
+    # for this variable is HHhMMm. Some examples are 12h, 45m and 1h30m.
+    interval: 12h
+
+  # KAC watches Kubernetes cluster continuously for any action - creation, updates and deletion -
+  # on resources and sends events with the resource representation and the type of action
+  # to the CrowdStrike cloud.
+  resourceWatcher:
+    # If set to false, KAC does not watch the Kubernetes cluster and you will not be ables
+    # to see the latest state of the Kubernetes resources in the Falcon UI until a resource
+    # snapshot has been taken. Any resources deleted when KAC does not watch the Kubernetes
+    # cluster will not be shown as deleted in the Falcon UI.
+    enabled: true
+
+# Falcon KAC can usually discover the clusterName automatically so setting clusterName here is normally
+# not necessary, but in some cases the clusterName cannot be discovered by the KAC, e.g. for self-hosted
+# kubernetes clusters such as MicroK8s. In those case, the clusterName can be manually set here.
+# The clusterName is displayed as hostname for KAC in the Host Management UI.
+# Note: if the clusterName is detected by the KAC, this value will be overwritten
+# for the falcon-kac that will be displayed in the Host Management UI.
+# Important Note: if the clusterName is detected by the agent, this value will be overwritten
+clusterName: ""
+
+# Annotations to apply to the webhook deployment
+annotations: {}
+
+# additionals labels to apply to the webhook deployment
+labels: {}
+
+# Annotations to apply to the webhook deployment
+podAnnotations: {}
+
+tolerations: []
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+          - amd64
+
+# Default limits for all KAC Pods. Review resource consumption for
+# each Pod in your environment and update accordingly
+falconClientResources:
+  limits:
+    cpu: 750m
+    memory: 256Mi
+  requests:
+    cpu: 500m
+    memory: 256Mi
+
+falconWatcherResources:
+  limits:
+    cpu: 500m
+    memory: 384Mi
+  requests:
+    cpu: 300m
+    memory: 384Mi
+
+falconAcResources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 300m
+    memory: 512Mi
+
+# Update Webhook and roll out new Deployment on helm upgrade
+autoDeploymentUpdate: true
+
+# Override various naming aspects of this chart
+# Only edit these if you know what you're doing
+nameOverride: ""
+fullnameOverride: ""
+webhook:
+  failurePolicy: Ignore
+  # Comma sparated list of namespaces in which we need to disable validation e.g test1,test2
+  disableNamespaces:
+
+# Specifies if Falcon KAC should use hostNetwork mode. This is required in some scenarios such as when a
+# custom CNI is in use where control plane nodes cannot establish network communication with pods.
+hostNetwork: false
+
+# Define Falcon KAC POD DNS Policy, follows cluster default when not set and sets "ClusterFirstWithHostNet" when hostNetwork = true unless overriden
+dnsPolicy:
+
+# Number of pods for resourceQuota object
+resourceQuota:
+  pods: 2
