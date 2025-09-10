@@ -72,17 +72,8 @@ redis:
     existingSecretPasswordKey: redis-password
 s3:
   deploy: false
-  endpoint: "https://storage.googleapis.com"
+  storageProvider: "gcs"
   bucket: ${google_storage_bucket.langfuse.name}
-  region: ${data.google_client_config.current.region}
-  accessKeyId:
-    secretKeyRef:
-      name: ${kubernetes_secret.langfuse.metadata[0].name}
-      key: storage_access_id
-  secretAccessKey:
-    secretKeyRef:
-      name: ${kubernetes_secret.langfuse.metadata[0].name}
-      key: storage_secret
   eventUpload:
     prefix: "events/"
   batchExport:
