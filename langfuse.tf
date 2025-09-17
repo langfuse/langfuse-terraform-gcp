@@ -104,6 +104,8 @@ langfuse:
       paths:
       - path: /
         pathType: Prefix
+    securityContext:
+      allowPrivilegeEscalation: false
 EOT
   encryption_values = !var.use_encryption_key ? "" : <<EOT
 langfuse:
