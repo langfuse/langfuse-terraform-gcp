@@ -28,7 +28,3 @@ resource "google_storage_bucket_iam_binding" "langfuse" {
     "serviceAccount:${google_service_account.langfuse.email}",
   ]
 }
-
-resource "google_storage_hmac_key" "langfuse" {
-  service_account_email = google_service_account.langfuse.email
-}

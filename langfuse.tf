@@ -72,17 +72,8 @@ redis:
     existingSecretPasswordKey: redis-password
 s3:
   deploy: false
-  endpoint: "https://storage.googleapis.com"
+  storageProvider: "gcs"
   bucket: ${google_storage_bucket.langfuse.name}
-  region: ${data.google_client_config.current.region}
-  accessKeyId:
-    secretKeyRef:
-      name: ${kubernetes_secret.langfuse.metadata[0].name}
-      key: storage_access_id
-  secretAccessKey:
-    secretKeyRef:
-      name: ${kubernetes_secret.langfuse.metadata[0].name}
-      key: storage_secret
   eventUpload:
     prefix: "events/"
   batchExport:
@@ -166,8 +157,6 @@ resource "kubernetes_secret" "langfuse" {
     "salt"                = random_bytes.salt.base64
     "nextauth-secret"     = random_bytes.nextauth_secret.base64
     "clickhouse-password" = random_password.clickhouse_password.result
-    "storage_access_id"   = google_storage_hmac_key.langfuse.access_id
-    "storage_secret"      = google_storage_hmac_key.langfuse.secret
     "encryption_key"      = var.use_encryption_key ? random_bytes.encryption_key[0].hex : ""
   }
 }
