@@ -122,6 +122,12 @@ resource "google_service_account_iam_binding" "workload_identity_binding" {
   ]
 }
 
+resource "google_service_account_iam_member" "langfuse_token_creator" {
+  service_account_id = google_service_account.langfuse.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.langfuse.email}"
+}
+
 resource "kubernetes_namespace" "langfuse" {
   metadata {
     name = var.kubernetes_namespace
