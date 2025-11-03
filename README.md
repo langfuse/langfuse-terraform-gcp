@@ -27,7 +27,7 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 
 ```hcl
 module "langfuse" {
-  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.1"
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.2"
 
   domain = "langfuse.example.com"
 
@@ -39,7 +39,7 @@ module "langfuse" {
   subnetwork_cidr = "10.0.0.0/16"
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "1.5.8"
+  langfuse_chart_version = "1.5.9"
 }
 
 provider "kubernetes" {
@@ -222,7 +222,7 @@ module "langfuse" {
 | cache_tier                          | The service tier of the instance                                                                                                                                                                          | string       | "STANDARD_HA"           |    no    |
 | cache_memory_size_gb                | Redis memory size in GB                                                                                                                                                                                   | number       | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
-| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.8"                |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.9"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
 
 ## Outputs
