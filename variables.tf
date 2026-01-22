@@ -99,3 +99,9 @@ variable "additional_env" {
     error_message = "Each environment variable must have either 'value' or 'valueFrom' specified, but not both."
   }
 }
+
+variable "additional_helm_values" {
+  description = "Additional Helm values to merge into the Langfuse chart. Useful for configuring nodeSelector, tolerations, resources, etc."
+  type        = string
+  default     = ""
+}
