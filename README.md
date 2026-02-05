@@ -224,6 +224,37 @@ module "langfuse" {
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
+| create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
+| ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
+
+## Custom SSL & External DNS
+
+If you want to use your own SSL certificate (e.g. a wildcard cert) and manage DNS externally (avoiding Google Cloud DNS delegation):
+
+1.  Upload your certificate to GCP as a `google_compute_ssl_certificate` resource.
+2.  Pass the certificate name to the module via `ssl_certificate_name`.
+3.  Set `create_dns_zone = false`.
+
+```hcl
+resource "google_compute_ssl_certificate" "my_cert" {
+  name_prefix = "my-cert-"
+  private_key = file("path/to/key.pem")
+  certificate = file("path/to/cert.pem")
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+  
+  # ... other config ...
+
+  create_dns_zone      = false
+  ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
+}
+```
 
 ## Outputs
 
