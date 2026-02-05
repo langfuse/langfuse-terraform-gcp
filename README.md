@@ -23,58 +23,61 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 - Network Connectivity API
 - Service Networking API
 
-2. Set up the module with the settings that suit your need. A minimal installation requires a `domain` which is under your control only.
+2. Set up the module.
+
+### Option A: Managed DNS (Default)
+
+If you want the module to manage the DNS zone and Certificate (delegation required):
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.3"
+  
+  domain = "langfuse.example.com"
+  create_dns_zone = true # Default
+  # ...
+}
+```
+
+Then apply the DNS zone first and configure delegation:
+
+```bash
+terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
+```
+
+Get the nameservers to delegate in your registrar:
+```bash
+gcloud dns managed-zones describe langfuse --format="get(nameServers)"
+```
+
+### Option B: Custom DNS / External SSL
+
+If you have your own certificate and manage DNS externally:
 
 ```hcl
 module "langfuse" {
   source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.3"
 
-  domain = "langfuse.example.com"
-
-  # Optional use a different name for your installation
-  # e.g. when using the module multiple times on the same GCP project
-  name   = "langfuse"
-
-  # Optional: Configure the VPC
-  subnetwork_cidr = "10.0.0.0/16"
-
-  # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "1.5.14"
-}
-
-provider "kubernetes" {
-  host                   = module.langfuse.cluster_host
-  cluster_ca_certificate = module.langfuse.cluster_ca_certificate
-  token                  = module.langfuse.cluster_token
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = module.langfuse.cluster_host
-    cluster_ca_certificate = module.langfuse.cluster_ca_certificate
-    token                  = module.langfuse.cluster_token
-  }
+  domain = "langfuse.yourcompany.com"
+  create_dns_zone = false
+  
+  # Pass your wildcard cert or private key here
+  ssl_certificate_body        = "..."
+  ssl_certificate_private_key = "..."
 }
 ```
 
-2. Apply the DNS zone and the GKE Cluster. This avoids an error around missing dependencies on the [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775).
-
-```bash
-terraform init
-terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
-```
-
-3. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
-
-```bash
-$ gcloud dns managed-zones describe langfuse --format="get(nameServers)"
-```
-
-4. Apply the full stack
+3. **Apply the full stack**
 
 ```bash
 terraform apply
 ```
+
+4. **Post-Deployment (Option B only)**:
+   Find the Ingress IP and create an A record in your external DNS:
+   ```bash
+   kubectl get ingress -n langfuse langfuse -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   ```
 
 5. Start using Langfuse by navigating to `https://<domain>` in your browser.
 
