@@ -123,3 +123,16 @@ variable "ssl_certificate_name" {
   type        = string
   default     = ""
 }
+
+variable "ssl_certificate_body" {
+  description = "Content of the SSL certificate (public key)"
+  type        = string
+  default     = ""
+}
+
+variable "ssl_certificate_private_key" {
+  description = "Content of the SSL certificate private key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
