@@ -111,3 +111,15 @@ variable "additional_env" {
     error_message = "Each environment variable must have either 'value' or 'valueFrom' specified, but not both."
   }
 }
+
+variable "create_dns_zone" {
+  description = "Whether to create a Google Cloud DNS managed zone"
+  type        = bool
+  default     = true
+}
+
+variable "ssl_certificate_name" {
+  description = "Name of an existing SSL certificate to use. If not provided, a managed certificate will be created."
+  type        = string
+  default     = ""
+}

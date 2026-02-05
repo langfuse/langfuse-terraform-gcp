@@ -1,6 +1,7 @@
 # TLS Certificate
 resource "google_compute_managed_ssl_certificate" "this" {
-  name = var.name
+  count = var.ssl_certificate_name == "" ? 1 : 0
+  name  = var.name
 
   managed {
     domains = [var.domain]
