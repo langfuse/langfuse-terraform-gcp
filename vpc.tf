@@ -71,3 +71,9 @@ resource "google_service_networking_connection" "private_service_connection" {
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.this.name]
 }
+
+# Static External IP for Ingress
+resource "google_compute_global_address" "ingress" {
+  count = var.provision_static_ip ? 1 : 0
+  name  = "${var.name}-ingress-ip"
+}
