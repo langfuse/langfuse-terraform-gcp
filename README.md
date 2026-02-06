@@ -227,6 +227,7 @@ module "langfuse" {
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
+| provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
 | create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
 | ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
 | ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally.                                                                                                | string       | ""                      |    no    |
@@ -265,7 +266,33 @@ module "langfuse" {
   # ...
   ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
 }
-```
+### Option 3: Pre-provision Static IP (Recommended for Production)
+If you need a static IP address for your A-record *before* deploying the full stack (e.g. to open a ticket with your DNS team), you can use the `provision_static_ip` flag.
+
+1.  Enable valid static IP provisioning in your module configuration:
+    ```hcl
+    module "langfuse" {
+      # ...
+      provision_static_ip = true
+    }
+    ```
+
+2.  Run a targeted apply to create just the IP:
+    ```bash
+    terraform apply -target=module.langfuse.google_compute_global_address.ingress
+    ```
+
+3.  Get the IP address from the output:
+    ```bash
+    terraform output ingress_ip
+    ```
+
+4.  Configure your DNS A-record with this IP.
+
+5.  Run the full apply:
+    ```bash
+    terraform apply
+    ```
 
 ## Outputs
 
