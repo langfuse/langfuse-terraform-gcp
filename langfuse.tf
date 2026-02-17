@@ -60,6 +60,8 @@ clickhouse:
   auth:
     existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
     existingSecretKey: clickhouse-password
+  persistence:
+    size: ${var.clickhouse_storage_size}
 redis:
   deploy: false
   host: ${google_redis_instance.this.host}

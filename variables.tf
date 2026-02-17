@@ -81,6 +81,12 @@ variable "langfuse_chart_version" {
   default     = "1.5.14"
 }
 
+variable "clickhouse_storage_size" {
+  description = "PVC size for each ClickHouse replica"
+  type        = string
+  default     = "100Gi"
+}
+
 variable "additional_env" {
   description = "Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps)."
   type = list(object({
