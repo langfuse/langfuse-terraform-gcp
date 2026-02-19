@@ -142,3 +142,77 @@ variable "provision_static_ip" {
   type        = bool
   default     = false
 }
+
+variable "web_resources" {
+  description = "Resources for Langfuse Web"
+  type        = map(any)
+  default = {
+    limits = {
+      cpu    = "2"
+      memory = "4Gi"
+    }
+    requests = {
+      cpu    = "2"
+      memory = "4Gi"
+    }
+  }
+}
+
+variable "web_hpa_config" {
+  description = "HPA configuration for Langfuse Web"
+  type        = map(any)
+  default = {
+    minReplicas                    = 1
+    maxReplicas                    = 3
+    targetCPUUtilizationPercentage = 50
+  }
+}
+
+variable "web_vpa_enabled" {
+  description = "Whether to enable VPA for Langfuse Web"
+  type        = bool
+  default     = false
+}
+
+variable "worker_resources" {
+  description = "Resources for Langfuse Worker"
+  type        = map(any)
+  default = {
+    limits = {
+      cpu    = "2"
+      memory = "4Gi"
+    }
+    requests = {
+      cpu    = "2"
+      memory = "4Gi"
+    }
+  }
+}
+
+variable "worker_hpa_config" {
+  description = "HPA configuration for Langfuse Worker"
+  type        = map(any)
+  default = {
+    minReplicas                    = 1
+    maxReplicas                    = 3
+    targetCPUUtilizationPercentage = 50
+  }
+}
+
+variable "worker_vpa_enabled" {
+  description = "Whether to enable VPA for Langfuse Worker"
+  type        = bool
+  default     = false
+}
+
+variable "clickhouse_zookeeper_enabled" {
+  description = "Whether to enable Zookeeper for ClickHouse"
+  type        = bool
+  default     = false
+}
+
+variable "clickhouse_keeper_enabled" {
+  description = "Whether to enable ClickHouse Keeper"
+  type        = bool
+  default     = true
+}

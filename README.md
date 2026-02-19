@@ -11,6 +11,48 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 ![gcp-architecture](https://github.com/user-attachments/assets/a8fb739f-1757-451e-9808-e77ebfa2d334)
 
 
+## Deployment Guide
+
+For a production setup with external secrets (e.g., Azure AD Client Secret) and static IP/DNS configuration, follow this procedure:
+
+1.  **Provision Infrastructure Basics**:
+    Run `terraform apply` with `provision_static_ip = true` to create the GKE cluster and the static IP address.
+    ```bash
+    terraform apply -var="provision_static_ip=true"
+    ```
+
+2.  **Configure DNS**:
+    Retrieve the static IP from the output and configure your DNS A-record to point to it.
+    ```bash
+    terraform output ingress_ip
+    ```
+
+3.  **Create External Secrets**:
+    Connect to your GKE cluster and manually create the secret containing your sensitive values (e.g., SSO client secret).
+    ```bash
+    gcloud container clusters get-credentials <cluster_name> --region <region>
+    kubectl create secret generic langfuse-secrets \
+      --from-literal=auth_azure_ad_client_secret=YOUR_SECRET_VALUE \
+      -n langfuse
+    ```
+
+4.  **Deploy Langfuse**:
+    Run `terraform apply` again, this time passing the `additional_env` configuration to reference the external secret.
+    ```hcl
+    # tfvars
+    additional_env = [
+      {
+        name = "AUTH_AZURE_AD_CLIENT_SECRET"
+        valueFrom = {
+          secretKeyRef = {
+            name = "langfuse-secrets"
+            key  = "auth_azure_ad_client_secret"
+          }
+        }
+      }
+    ]
+    ```
+
 ## Usage
 
 1. Enable required APIs on your Google Cloud Account:
@@ -232,6 +274,16 @@ module "langfuse" {
 | ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
 | ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally.                                                                                                | string       | ""                      |    no    |
 | ssl_certificate_private_key         | Content of the SSL certificate private key. Used to create a `google_compute_ssl_certificate` internally.                                                                                                 | string       | ""                      |    no    |
+| database_backup_enabled             | Whether to enable Cloud SQL automated backups                                                                                                                                                             | bool         | true                    |    no    |
+| database_pitr_enabled               | Whether to enable Cloud SQL point-in-time recovery                                                                                                                                                        | bool         | true                    |    no    |
+| web_resources                       | Resources for Langfuse Web                                                                                                                                                                                | map(any)     | { limits = { cpu = "2", memory = "4Gi" }, requests = { cpu = "2", memory = "4Gi" } } |    no    |
+| web_hpa_config                      | HPA configuration for Langfuse Web                                                                                                                                                                        | map(any)     | { minReplicas = 1, maxReplicas = 3, targetCPUUtilizationPercentage = 50 } |    no    |
+| web_vpa_enabled                     | Whether to enable VPA for Langfuse Web                                                                                                                                                                    | bool         | false                   |    no    |
+| worker_resources                    | Resources for Langfuse Worker                                                                                                                                                                             | map(any)     | { limits = { cpu = "2", memory = "4Gi" }, requests = { cpu = "2", memory = "4Gi" } } |    no    |
+| worker_hpa_config                   | HPA configuration for Langfuse Worker                                                                                                                                                                     | map(any)     | { minReplicas = 1, maxReplicas = 3, targetCPUUtilizationPercentage = 50 } |    no    |
+| worker_vpa_enabled                  | Whether to enable VPA for Langfuse Worker                                                                                                                                                                 | bool         | false                   |    no    |
+| clickhouse_zookeeper_enabled        | Whether to enable Zookeeper for ClickHouse                                                                                                                                                                | bool         | false                   |    no    |
+| clickhouse_keeper_enabled           | Whether to enable ClickHouse Keeper                                                                                                                                                                       | bool         | true                    |    no    |
 
 ## Custom SSL & External DNS
 
