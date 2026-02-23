@@ -159,9 +159,11 @@ This module creates a complete Langfuse stack with the following components:
 - NGINX Ingress Controller (via Helm) for ingress
 - Filestore CSI Driver for persistent storage
 
-## Additional Environment Variables
+## Customization
 
-The module supports injecting custom environment variables into the Langfuse container through the `additional_env` parameter. This feature supports both direct values and Kubernetes `valueFrom` references.
+The module exposes two parameters for extending the Langfuse deployment without forking the module:
+- **`additional_env`**: inject custom environment variables (direct values or Kubernetes secret/configMap references)
+- **`additional_helm_values`**: pass arbitrary raw Helm YAML values, merged last (takes precedence over module defaults). Use this for resources, HPA, VPA, node selectors, tolerations, etc.
 
 ```hcl
 module "langfuse" {
@@ -198,6 +200,32 @@ module "langfuse" {
       }
     }
   ]
+
+  # Custom resources and autoscaling via additional_helm_values
+  additional_helm_values = <<-EOT
+    langfuse:
+      web:
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        hpa:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 70
+      worker:
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+  EOT
 }
 ```
 
@@ -276,12 +304,7 @@ module "langfuse" {
 | ssl_certificate_private_key         | Content of the SSL certificate private key. Used to create a `google_compute_ssl_certificate` internally.                                                                                                 | string       | ""                      |    no    |
 | database_backup_enabled             | Whether to enable Cloud SQL automated backups                                                                                                                                                             | bool         | true                    |    no    |
 | database_pitr_enabled               | Whether to enable Cloud SQL point-in-time recovery                                                                                                                                                        | bool         | true                    |    no    |
-| web_resources                       | Resources for Langfuse Web                                                                                                                                                                                | map(any)     | { limits = { cpu = "2", memory = "4Gi" }, requests = { cpu = "2", memory = "4Gi" } } |    no    |
-| web_hpa_config                      | HPA configuration for Langfuse Web                                                                                                                                                                        | map(any)     | { minReplicas = 1, maxReplicas = 3, targetCPUUtilizationPercentage = 50 } |    no    |
-| web_vpa_enabled                     | Whether to enable VPA for Langfuse Web                                                                                                                                                                    | bool         | false                   |    no    |
-| worker_resources                    | Resources for Langfuse Worker                                                                                                                                                                             | map(any)     | { limits = { cpu = "2", memory = "4Gi" }, requests = { cpu = "2", memory = "4Gi" } } |    no    |
-| worker_hpa_config                   | HPA configuration for Langfuse Worker                                                                                                                                                                     | map(any)     | { minReplicas = 1, maxReplicas = 3, targetCPUUtilizationPercentage = 50 } |    no    |
-| worker_vpa_enabled                  | Whether to enable VPA for Langfuse Worker                                                                                                                                                                 | bool         | false                   |    no    |
+| additional_helm_values              | Additional raw Helm values (YAML string) merged last into the chart release. Use to configure resources, HPA, VPA, node selectors, tolerations, or any chart value not exposed as a module variable.     | string       | ""                      |    no    |
 
 ## Custom SSL & External DNS
 

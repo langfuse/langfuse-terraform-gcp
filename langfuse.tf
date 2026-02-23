@@ -47,54 +47,6 @@ langfuse:
         items:
           - key: redis-certificate
             path: redis-ca.crt
-  web:
-    resources:
-      limits:
-        cpu: ${var.web_resources.limits.cpu}
-        memory: ${var.web_resources.limits.memory}
-      requests:
-        cpu: ${var.web_resources.requests.cpu}
-        memory: ${var.web_resources.requests.memory}
-    hpa:
-      enabled: true
-      minReplicas: ${var.web_hpa_config.minReplicas}
-      maxReplicas: ${var.web_hpa_config.maxReplicas}
-      targetCPUUtilizationPercentage: ${var.web_hpa_config.targetCPUUtilizationPercentage}
-    vpa:
-      enabled: ${var.web_vpa_enabled}
-    livenessProbe:
-      path: "/api/public/health"
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 10
-    readinessProbe:
-      path: "/api/public/ready"
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 10
-  worker:
-    resources:
-      limits:
-        cpu: ${var.worker_resources.limits.cpu}
-        memory: ${var.worker_resources.limits.memory}
-      requests:
-        cpu: ${var.worker_resources.requests.cpu}
-        memory: ${var.worker_resources.requests.memory}
-    hpa:
-      enabled: true
-      minReplicas: ${var.worker_hpa_config.minReplicas}
-      maxReplicas: ${var.worker_hpa_config.maxReplicas}
-      targetCPUUtilizationPercentage: ${var.worker_hpa_config.targetCPUUtilizationPercentage}
-    vpa:
-      enabled: ${var.worker_vpa_enabled}
-    livenessProbe:
-      path: "/api/health"
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 10
 postgresql:
   deploy: false
   host: ${google_sql_database_instance.this.private_ip_address}
@@ -225,11 +177,12 @@ resource "helm_release" "langfuse" {
   chart      = "langfuse"
   namespace  = kubernetes_namespace.langfuse.metadata[0].name
 
-  values = [
+  values = compact([
     local.langfuse_values,
     local.ingress_values,
     local.encryption_values,
-  ]
+    var.additional_helm_values,
+  ])
 
   depends_on = [
     kubernetes_secret.langfuse,

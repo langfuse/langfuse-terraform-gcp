@@ -112,6 +112,12 @@ variable "additional_env" {
   }
 }
 
+variable "additional_helm_values" {
+  description = "Additional raw Helm values (YAML string) to merge into the Langfuse chart release. Useful for configuring resources, HPA, node selectors, tolerations, or any other chart values not exposed as module variables. Values are merged last and take precedence over module-generated values."
+  type        = string
+  default     = ""
+}
+
 variable "create_dns_zone" {
   description = "Whether to create a Google Cloud DNS managed zone"
   type        = bool
@@ -139,68 +145,6 @@ variable "ssl_certificate_private_key" {
 
 variable "provision_static_ip" {
   description = "Whether to provision a static global IP for the Ingress. Set to true if you need a stable IP for DNS configuration before deployment."
-  type        = bool
-  default     = false
-}
-
-variable "web_resources" {
-  description = "Resources for Langfuse Web"
-  type        = map(any)
-  default = {
-    limits = {
-      cpu    = "2"
-      memory = "4Gi"
-    }
-    requests = {
-      cpu    = "2"
-      memory = "4Gi"
-    }
-  }
-}
-
-variable "web_hpa_config" {
-  description = "HPA configuration for Langfuse Web"
-  type        = map(any)
-  default = {
-    minReplicas                    = 1
-    maxReplicas                    = 3
-    targetCPUUtilizationPercentage = 50
-  }
-}
-
-variable "web_vpa_enabled" {
-  description = "Whether to enable VPA for Langfuse Web"
-  type        = bool
-  default     = false
-}
-
-variable "worker_resources" {
-  description = "Resources for Langfuse Worker"
-  type        = map(any)
-  default = {
-    limits = {
-      cpu    = "2"
-      memory = "4Gi"
-    }
-    requests = {
-      cpu    = "2"
-      memory = "4Gi"
-    }
-  }
-}
-
-variable "worker_hpa_config" {
-  description = "HPA configuration for Langfuse Worker"
-  type        = map(any)
-  default = {
-    minReplicas                    = 1
-    maxReplicas                    = 3
-    targetCPUUtilizationPercentage = 50
-  }
-}
-
-variable "worker_vpa_enabled" {
-  description = "Whether to enable VPA for Langfuse Worker"
   type        = bool
   default     = false
 }
