@@ -204,15 +204,3 @@ variable "worker_vpa_enabled" {
   type        = bool
   default     = false
 }
-
-variable "clickhouse_zookeeper_enabled" {
-  description = "Whether to enable Zookeeper for ClickHouse"
-  type        = bool
-  default     = false
-}
-
-variable "clickhouse_keeper_enabled" {
-  description = "Whether to enable ClickHouse Keeper"
-  type        = bool
-  default     = true
-}
