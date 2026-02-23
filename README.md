@@ -11,6 +11,48 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 ![gcp-architecture](https://github.com/user-attachments/assets/a8fb739f-1757-451e-9808-e77ebfa2d334)
 
 
+## Deployment Guide
+
+The following example shows a production setup with Azure AD SSO secrets managed externally (via `kubectl`) and a static IP pre-provisioned for DNS configuration. Adapt as needed for your environment.
+
+1.  **Provision Infrastructure Basics**:
+    Run `terraform apply` with `provision_static_ip = true` to create the GKE cluster and the static IP address.
+    ```bash
+    terraform apply -var="provision_static_ip=true"
+    ```
+
+2.  **Configure DNS**:
+    Retrieve the static IP from the output and configure your DNS A-record to point to it.
+    ```bash
+    terraform output ingress_ip
+    ```
+
+3.  **Create External Secrets**:
+    Connect to your GKE cluster and manually create the secret containing your sensitive values (e.g., SSO client secret).
+    ```bash
+    gcloud container clusters get-credentials <cluster_name> --region <region>
+    kubectl create secret generic langfuse-secrets \
+      --from-literal=auth_azure_ad_client_secret=YOUR_SECRET_VALUE \
+      -n langfuse
+    ```
+
+4.  **Deploy Langfuse**:
+    Run `terraform apply` again, this time passing the `additional_env` configuration to reference the external secret.
+    ```hcl
+    # tfvars
+    additional_env = [
+      {
+        name = "AUTH_AZURE_AD_CLIENT_SECRET"
+        valueFrom = {
+          secretKeyRef = {
+            name = "langfuse-secrets"
+            key  = "auth_azure_ad_client_secret"
+          }
+        }
+      }
+    ]
+    ```
+
 ## Usage
 
 1. Enable required APIs on your Google Cloud Account:
@@ -23,58 +65,61 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 - Network Connectivity API
 - Service Networking API
 
-2. Set up the module with the settings that suit your need. A minimal installation requires a `domain` which is under your control only.
+2. Set up the module.
+
+### Option A: Managed DNS (Default)
+
+If you want the module to manage the DNS zone and Certificate (delegation required):
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.3"
+  
+  domain = "langfuse.example.com"
+  create_dns_zone = true # Default
+  # ...
+}
+```
+
+Then apply the DNS zone first and configure delegation:
+
+```bash
+terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
+```
+
+Get the nameservers to delegate in your registrar:
+```bash
+gcloud dns managed-zones describe langfuse --format="get(nameServers)"
+```
+
+### Option B: Custom DNS / External SSL
+
+If you have your own certificate and manage DNS externally:
 
 ```hcl
 module "langfuse" {
   source = "github.com/langfuse/langfuse-terraform-gcp?ref=0.3.3"
 
-  domain = "langfuse.example.com"
-
-  # Optional use a different name for your installation
-  # e.g. when using the module multiple times on the same GCP project
-  name   = "langfuse"
-
-  # Optional: Configure the VPC
-  subnetwork_cidr = "10.0.0.0/16"
-
-  # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "1.5.14"
-}
-
-provider "kubernetes" {
-  host                   = module.langfuse.cluster_host
-  cluster_ca_certificate = module.langfuse.cluster_ca_certificate
-  token                  = module.langfuse.cluster_token
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = module.langfuse.cluster_host
-    cluster_ca_certificate = module.langfuse.cluster_ca_certificate
-    token                  = module.langfuse.cluster_token
-  }
+  domain = "langfuse.yourcompany.com"
+  create_dns_zone = false
+  
+  # Pass your wildcard cert or private key here
+  ssl_certificate_body        = "..."
+  ssl_certificate_private_key = "..."
 }
 ```
 
-2. Apply the DNS zone and the GKE Cluster. This avoids an error around missing dependencies on the [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775).
-
-```bash
-terraform init
-terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
-```
-
-3. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
-
-```bash
-$ gcloud dns managed-zones describe langfuse --format="get(nameServers)"
-```
-
-4. Apply the full stack
+3. **Apply the full stack**
 
 ```bash
 terraform apply
 ```
+
+4. **Post-Deployment (Option B only)**:
+   Find the Ingress IP and create an A record in your external DNS:
+   ```bash
+   kubectl get ingress -n langfuse langfuse -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   ```
 
 5. Start using Langfuse by navigating to `https://<domain>` in your browser.
 
@@ -111,12 +156,14 @@ This module creates a complete Langfuse stack with the following components:
 - Cloud Storage bucket for storage
 - TLS certificates and Cloud DNS configuration
 - Required IAM roles and firewall rules
-- GKE Ingress Controller for ingress
+- NGINX Ingress Controller (via Helm) for ingress
 - Filestore CSI Driver for persistent storage
 
-## Additional Environment Variables
+## Customization
 
-The module supports injecting custom environment variables into the Langfuse container through the `additional_env` parameter. This feature supports both direct values and Kubernetes `valueFrom` references.
+The module exposes two parameters for extending the Langfuse deployment without forking the module:
+- **`additional_env`**: inject custom environment variables (direct values or Kubernetes secret/configMap references)
+- **`additional_helm_values`**: pass arbitrary raw Helm YAML values, merged last (takes precedence over module defaults). Use this for resources, HPA, VPA, node selectors, tolerations, etc.
 
 ```hcl
 module "langfuse" {
@@ -153,6 +200,32 @@ module "langfuse" {
       }
     }
   ]
+
+  # Custom resources and autoscaling via additional_helm_values
+  additional_helm_values = <<-EOT
+    langfuse:
+      web:
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        hpa:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 70
+      worker:
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+  EOT
 }
 ```
 
@@ -213,7 +286,7 @@ module "langfuse" {
 |-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------------|:--------:|
 | name                                | Name to use for or prefix resources with                                                                                                                                                                  | string       | "langfuse"              |    no    |
 | domain                              | Domain name used to host langfuse on (e.g., langfuse.company.com)                                                                                                                                         | string       | n/a                     |   yes    |
-| use_encryption_key                  | Wheter or not to use an Encryption key for LLM API credential and integration credential store                                                                                                            | bool         | true                    |    no    |
+| use_encryption_key                  | Whether or not to use an Encryption key for LLM API credential and integration credential store                                                                                                           | bool         | true                    |    no    |
 | kubernetes_namespace                | Namespace to deploy langfuse to                                                                                                                                                                           | string       | "langfuse"              |    no    |
 | subnetwork_cidr                     | CIDR block for Subnetwork                                                                                                                                                                                 | string       | "10.0.0.0/16"           |    no    |
 | database_instance_tier              | The machine type to use for the database instance                                                                                                                                                         | string       | "db-perf-optimized-N-2" |    no    |
@@ -224,15 +297,87 @@ module "langfuse" {
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
+| provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
+| create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
+| ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
+| ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally.                                                                                                | string       | ""                      |    no    |
+| ssl_certificate_private_key         | Content of the SSL certificate private key. Used to create a `google_compute_ssl_certificate` internally.                                                                                                 | string       | ""                      |    no    |
+| database_backup_enabled             | Whether to enable Cloud SQL automated backups                                                                                                                                                             | bool         | true                    |    no    |
+| database_pitr_enabled               | Whether to enable Cloud SQL point-in-time recovery                                                                                                                                                        | bool         | true                    |    no    |
+| additional_helm_values              | Additional raw Helm values (YAML string) merged last into the chart release. Use to configure resources, HPA, VPA, node selectors, tolerations, or any chart value not exposed as a module variable.     | string       | ""                      |    no    |
+
+## Custom SSL & External DNS
+
+If you want to use your own SSL certificate (e.g. a wildcard cert) and manage DNS externally (avoiding Google Cloud DNS delegation), you have two options:
+
+### Option 1: Pass raw certificate content (Recommended)
+The module will create the `google_compute_ssl_certificate` resource for you.
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+  
+  # ... other config ...
+
+  create_dns_zone             = false
+  ssl_certificate_body        = var.ssl_certificate_body        # Pass from secrets
+  ssl_certificate_private_key = var.ssl_certificate_private_key # Pass from secrets
+}
+```
+
+### Option 2: Pre-create certificate resource
+Create the resource yourself and pass the name.
+
+```hcl
+resource "google_compute_ssl_certificate" "my_cert" {
+  name_prefix = "my-cert-"
+  # ...
+}
+
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+  # ...
+  ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
+}
+```
+
+### Option 3: Pre-provision Static IP (Recommended for Production)
+If you need a static IP address for your A-record *before* deploying the full stack (e.g. to open a ticket with your DNS team), you can use the `provision_static_ip` flag.
+
+1.  Enable valid static IP provisioning in your module configuration:
+    ```hcl
+    module "langfuse" {
+      # ...
+      provision_static_ip = true
+    }
+    ```
+
+2.  Run a targeted apply to create just the IP:
+    ```bash
+    terraform apply -target=module.langfuse.google_compute_global_address.ingress
+    ```
+
+3.  Get the IP address from the output:
+    ```bash
+    terraform output ingress_ip
+    ```
+
+4.  Configure your DNS A-record with this IP.
+
+5.  Run the full apply:
+    ```bash
+    terraform apply
+    ```
 
 ## Outputs
 
-| Name                   | Description                      |
-|------------------------|----------------------------------|
-| cluster_name           | GKE Cluster Name                 |
-| cluster_host           | GKE Cluster endpoint             |
-| cluster_ca_certificate | GKE Cluster CA certificate       |
-| cluster_token          | GKE Cluster authentication token |
+| Name                   | Description                        |
+|------------------------|------------------------------------|
+| cluster_name           | GKE Cluster Name                   |
+| cluster_host           | GKE Cluster endpoint               |
+| cluster_ca_certificate | GKE Cluster CA certificate         |
+| cluster_token          | GKE Cluster authentication token   |
+| ingress_ip             | Static IP address of the Ingress   |
 
 ## Contributing
 
