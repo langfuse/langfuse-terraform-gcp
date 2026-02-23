@@ -13,7 +13,7 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 
 ## Deployment Guide
 
-For a production setup with external secrets (e.g., Azure AD Client Secret) and static IP/DNS configuration, follow this procedure:
+The following example shows a production setup with Azure AD SSO secrets managed externally (via `kubectl`) and a static IP pre-provisioned for DNS configuration. Adapt as needed for your environment.
 
 1.  **Provision Infrastructure Basics**:
     Run `terraform apply` with `provision_static_ip = true` to create the GKE cluster and the static IP address.
@@ -156,7 +156,7 @@ This module creates a complete Langfuse stack with the following components:
 - Cloud Storage bucket for storage
 - TLS certificates and Cloud DNS configuration
 - Required IAM roles and firewall rules
-- GKE Ingress Controller for ingress
+- NGINX Ingress Controller (via Helm) for ingress
 - Filestore CSI Driver for persistent storage
 
 ## Additional Environment Variables
@@ -258,7 +258,7 @@ module "langfuse" {
 |-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------------|:--------:|
 | name                                | Name to use for or prefix resources with                                                                                                                                                                  | string       | "langfuse"              |    no    |
 | domain                              | Domain name used to host langfuse on (e.g., langfuse.company.com)                                                                                                                                         | string       | n/a                     |   yes    |
-| use_encryption_key                  | Wheter or not to use an Encryption key for LLM API credential and integration credential store                                                                                                            | bool         | true                    |    no    |
+| use_encryption_key                  | Whether or not to use an Encryption key for LLM API credential and integration credential store                                                                                                           | bool         | true                    |    no    |
 | kubernetes_namespace                | Namespace to deploy langfuse to                                                                                                                                                                           | string       | "langfuse"              |    no    |
 | subnetwork_cidr                     | CIDR block for Subnetwork                                                                                                                                                                                 | string       | "10.0.0.0/16"           |    no    |
 | database_instance_tier              | The machine type to use for the database instance                                                                                                                                                         | string       | "db-perf-optimized-N-2" |    no    |
@@ -282,8 +282,6 @@ module "langfuse" {
 | worker_resources                    | Resources for Langfuse Worker                                                                                                                                                                             | map(any)     | { limits = { cpu = "2", memory = "4Gi" }, requests = { cpu = "2", memory = "4Gi" } } |    no    |
 | worker_hpa_config                   | HPA configuration for Langfuse Worker                                                                                                                                                                     | map(any)     | { minReplicas = 1, maxReplicas = 3, targetCPUUtilizationPercentage = 50 } |    no    |
 | worker_vpa_enabled                  | Whether to enable VPA for Langfuse Worker                                                                                                                                                                 | bool         | false                   |    no    |
-| clickhouse_zookeeper_enabled        | Whether to enable Zookeeper for ClickHouse                                                                                                                                                                | bool         | false                   |    no    |
-| clickhouse_keeper_enabled           | Whether to enable ClickHouse Keeper                                                                                                                                                                       | bool         | true                    |    no    |
 
 ## Custom SSL & External DNS
 
@@ -318,6 +316,8 @@ module "langfuse" {
   # ...
   ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
 }
+```
+
 ### Option 3: Pre-provision Static IP (Recommended for Production)
 If you need a static IP address for your A-record *before* deploying the full stack (e.g. to open a ticket with your DNS team), you can use the `provision_static_ip` flag.
 
@@ -348,12 +348,13 @@ If you need a static IP address for your A-record *before* deploying the full st
 
 ## Outputs
 
-| Name                   | Description                      |
-|------------------------|----------------------------------|
-| cluster_name           | GKE Cluster Name                 |
-| cluster_host           | GKE Cluster endpoint             |
-| cluster_ca_certificate | GKE Cluster CA certificate       |
-| cluster_token          | GKE Cluster authentication token |
+| Name                   | Description                        |
+|------------------------|------------------------------------|
+| cluster_name           | GKE Cluster Name                   |
+| cluster_host           | GKE Cluster endpoint               |
+| cluster_ca_certificate | GKE Cluster CA certificate         |
+| cluster_token          | GKE Cluster authentication token   |
+| ingress_ip             | Static IP address of the Ingress   |
 
 ## Contributing
 
