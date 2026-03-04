@@ -81,6 +81,12 @@ variable "langfuse_chart_version" {
   default     = "1.5.14"
 }
 
+variable "additional_helm_values" {
+  description = "Additional Helm values to pass to the Langfuse Helm chart. Each entry is a YAML-encoded string that will be merged with the default values."
+  type        = list(string)
+  default     = []
+}
+
 variable "additional_env" {
   description = "Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps)."
   type = list(object({
