@@ -224,6 +224,72 @@ module "langfuse" {
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
+| provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
+| ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
+| ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally.                                                                                                | string       | ""                      |    no    |
+| ssl_certificate_private_key         | Content of the SSL certificate private key. Used to create a `google_compute_ssl_certificate` internally.                                                                                                 | string       | ""                      |    no    |
+
+## Custom SSL & Static IP
+
+If you want to use your own SSL certificate (e.g. a wildcard cert) and manage DNS externally (avoiding Google Cloud DNS delegation), you have two options:
+
+### Option 1: Pass raw certificate content (Recommended)
+The module will create the `google_compute_ssl_certificate` resource for you.
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+  
+  # ... other config ...
+
+  ssl_certificate_body        = var.ssl_certificate_body        # Pass from secrets
+  ssl_certificate_private_key = var.ssl_certificate_private_key # Pass from secrets
+}
+```
+
+### Option 2: Pre-create certificate resource
+Create the resource yourself and pass the name.
+
+```hcl
+resource "google_compute_ssl_certificate" "my_cert" {
+  name_prefix = "my-cert-"
+  # ...
+}
+
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+  # ...
+  ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
+}
+```
+
+### Option 3: Pre-provision Static IP (Recommended for Production)
+If you need a static IP address for your A-record *before* deploying the full stack (e.g. to open a ticket with your DNS team), you can use the `provision_static_ip` flag.
+
+1.  Enable valid static IP provisioning in your module configuration:
+    ```hcl
+    module "langfuse" {
+      # ...
+      provision_static_ip = true
+    }
+    ```
+
+2.  Run a targeted apply to create just the IP:
+    ```bash
+    terraform apply -target=module.langfuse.google_compute_global_address.ingress
+    ```
+
+3.  Get the IP address from the output:
+    ```bash
+    terraform output ingress_ip
+    ```
+
+4.  Configure your DNS A-record with this IP.
+
+5.  Run the full apply:
+    ```bash
+    terraform apply
+    ```
 
 ## Outputs
 
@@ -233,6 +299,7 @@ module "langfuse" {
 | cluster_host           | GKE Cluster endpoint             |
 | cluster_ca_certificate | GKE Cluster CA certificate       |
 | cluster_token          | GKE Cluster authentication token |
+| ingress_ip             | Static IP address of the Ingress   |
 
 ## Contributing
 

@@ -117,3 +117,28 @@ variable "additional_env" {
     error_message = "Each environment variable must have either 'value' or 'valueFrom' specified, but not both."
   }
 }
+
+variable "ssl_certificate_name" {
+  description = "Name of an existing SSL certificate to use. If not provided, a managed certificate will be created."
+  type        = string
+  default     = ""
+}
+
+variable "ssl_certificate_body" {
+  description = "Content of the SSL certificate (public key)"
+  type        = string
+  default     = ""
+}
+
+variable "ssl_certificate_private_key" {
+  description = "Content of the SSL certificate private key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "provision_static_ip" {
+  description = "Whether to provision a static global IP for the Ingress. Set to true if you need a stable IP for DNS configuration before deployment."
+  type        = bool
+  default     = false
+}
