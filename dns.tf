@@ -1,5 +1,6 @@
 # Create Cloud DNS zone
 resource "google_dns_managed_zone" "this" {
+  count       = var.create_dns_zone ? 1 : 0
   name        = replace(var.domain, ".", "-")
   dns_name    = "${var.domain}."
   description = "DNS zone for Langfuse domain"
@@ -19,8 +20,9 @@ data "kubernetes_ingress_v1" "langfuse" {
 
 # Create DNS A record for the load balancer
 resource "google_dns_record_set" "this" {
-  name         = google_dns_managed_zone.this.dns_name
-  managed_zone = google_dns_managed_zone.this.name
+  count        = var.create_dns_zone ? 1 : 0
+  name         = google_dns_managed_zone.this[0].dns_name
+  managed_zone = google_dns_managed_zone.this[0].name
   type         = "A"
   ttl          = 300
 
