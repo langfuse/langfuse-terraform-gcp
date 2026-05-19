@@ -19,3 +19,8 @@ output "cluster_token" {
   value       = data.google_client_config.current.access_token
   sensitive   = true
 }
+
+output "ingress_ip" {
+  description = "The static global IP address reserved for the Ingress"
+  value       = var.provision_static_ip ? google_compute_global_address.ingress[0].address : null
+}
