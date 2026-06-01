@@ -1,4 +1,4 @@
-![GitHub Banner](https://github.com/langfuse/langfuse-k8s/assets/2834609/2982b65d-d0bc-4954-82ff-af8da3a4fac8)
+<img width="2400" height="600" alt="hero-b" src="https://github.com/user-attachments/assets/aa5438d5-5274-4c68-9e9d-e733e8960f08" />
 
 # GCP Langfuse Terraform module
 
