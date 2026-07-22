@@ -57,9 +57,18 @@ postgresql:
     secretKeys:
       userPasswordKey: postgres-password
 clickhouse:
+  deploy: false
+  host: ${jsonencode(local.clickhouse_host)}
+  httpPort: ${local.clickhouse_http_port}
+  nativePort: ${local.clickhouse_native_port}
+  database: ${jsonencode(local.clickhouse_database)}
+  clusterEnabled: ${local.clickhouse_cluster_enabled}
   auth:
+    username: ${jsonencode(local.clickhouse_username)}
     existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
     existingSecretKey: clickhouse-password
+  migration:
+    ssl: ${local.clickhouse_migration_ssl}
 redis:
   deploy: false
   host: ${google_redis_instance.this.host}
@@ -165,7 +174,7 @@ resource "kubernetes_secret" "langfuse" {
     "postgres-password"   = random_password.postgres_password.result
     "salt"                = random_bytes.salt.base64
     "nextauth-secret"     = random_bytes.nextauth_secret.base64
-    "clickhouse-password" = random_password.clickhouse_password.result
+    "clickhouse-password" = local.deploy_clickhouse ? random_password.clickhouse_password.result : var.external_clickhouse_password
     "encryption_key"      = var.use_encryption_key ? random_bytes.encryption_key[0].hex : ""
   }
 }
@@ -186,7 +195,15 @@ resource "helm_release" "langfuse" {
   depends_on = [
     kubernetes_secret.langfuse,
     google_service_account.langfuse,
+    helm_release.clickhouse,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = var.external_clickhouse == null || var.external_clickhouse_password != ""
+      error_message = "external_clickhouse_password must be set when external_clickhouse is configured."
+    }
+  }
 
   timeout = 1800 # Increase timeout to 15 minutes
 }

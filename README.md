@@ -109,10 +109,46 @@ This module creates a complete Langfuse stack with the following components:
 - Cloud SQL PostgreSQL instance
 - Cloud Memorystore Redis instance
 - Cloud Storage bucket for storage
+- ClickHouse cluster managed by the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) (including ClickHouse Keeper and cert-manager), or optionally an external ClickHouse such as ClickHouse Cloud
 - TLS certificates and Cloud DNS configuration
 - Required IAM roles and firewall rules
 - GKE Ingress Controller for ingress
 - Filestore CSI Driver for persistent storage
+
+## ClickHouse
+
+By default the module deploys a ClickHouse cluster into the GKE cluster using the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) instead of the Bitnami ClickHouse chart bundled with the Langfuse Helm chart. This avoids any dependency on the deprecated `bitnamilegacy` container images, which no longer receive updates or security patches. The module installs:
+
+- [cert-manager](https://cert-manager.io/) (required by the operator to issue its admission webhook certificates)
+- The ClickHouse operator (`oci://ghcr.io/clickhouse/clickhouse-operator-helm`)
+- A `ClickHouseCluster` (1 shard, `clickhouse_replicas` replicas) and a `KeeperCluster` via the official cluster chart (`oci://ghcr.io/clickhouse/clickhouse-cluster-helm`)
+
+The deployment can be sized with the `clickhouse_replicas`, `clickhouse_resources`, `clickhouse_storage_size`, `clickhouse_storage_class`, `clickhouse_keeper_replicas`, and `clickhouse_keeper_storage_size` variables.
+
+### External ClickHouse (bring your own)
+
+To use an existing ClickHouse instead — for example [ClickHouse Cloud](https://clickhouse.com/cloud) — set `external_clickhouse`. The module then skips cert-manager, the operator, and the in-cluster ClickHouse entirely. See [examples/external-clickhouse](examples/external-clickhouse/external-clickhouse.tf) for a full example.
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+
+  domain = "langfuse.example.com"
+
+  external_clickhouse = {
+    host = "https://abc123.europe-west4.gcp.clickhouse.cloud"
+    # Defaults: http_port = 8443, native_port = 9440, username = "default",
+    # database = "default", cluster_enabled = true, migration_ssl = true
+  }
+  external_clickhouse_password = var.clickhouse_password
+}
+```
+
+Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node deployments. Make sure the GKE cluster can reach the external ClickHouse (for ClickHouse Cloud, check the IP allowlist or use Private Service Connect).
+
+### Migrating from module versions <= 0.3.x
+
+Earlier versions of this module deployed ClickHouse (and ZooKeeper) through the Bitnami subchart of the Langfuse Helm chart. **Upgrading is a breaking change: the operator-managed ClickHouse starts empty and there is no automated data migration.** Trace, observation, and score data lives in ClickHouse, so existing installations must copy it over (e.g. `BACKUP`/`RESTORE` through a GCS bucket, or `INSERT INTO ... SELECT ... FROM remote(...)` while the old StatefulSet's PVCs still exist). New installations are unaffected. If you need to stay on the Bitnami-based deployment for now, pin this module to `0.3.x`.
 
 ## Additional Environment Variables
 
@@ -164,7 +200,7 @@ module "langfuse" {
 | google      | >= 5.0  |
 | google-beta | >= 5.0  |
 | kubernetes  | >= 2.10 |
-| helm        | >= 2.5  |
+| helm        | >= 2.7  |
 
 ## Providers
 
@@ -173,7 +209,7 @@ module "langfuse" {
 | google      | >= 5.0  |
 | google-beta | >= 5.0  |
 | kubernetes  | >= 2.10 |
-| helm        | >= 2.5  |
+| helm        | >= 2.7  |
 | random      | >= 3.0  |
 | tls         | >= 3.0  |
 
@@ -204,6 +240,8 @@ module "langfuse" {
 | kubernetes_secret.langfuse                  | resource |
 | helm_release.ingress_nginx                  | resource |
 | helm_release.cert_manager                   | resource |
+| helm_release.clickhouse_operator            | resource |
+| helm_release.clickhouse                     | resource |
 | random_password.database                    | resource |
 | tls_private_key.langfuse                    | resource |
 
@@ -222,6 +260,16 @@ module "langfuse" {
 | cache_tier                          | The service tier of the instance                                                                                                                                                                          | string       | "STANDARD_HA"           |    no    |
 | cache_memory_size_gb                | Redis memory size in GB                                                                                                                                                                                   | number       | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
+| clickhouse_replicas                 | Number of ClickHouse replicas (single shard). The default of 3 provides a highly available setup. Only used when ClickHouse is deployed in-cluster.                                                       | number       | 3                       |    no    |
+| clickhouse_keeper_replicas          | Number of ClickHouse Keeper replicas. Must be 1, 3 or 5 to maintain quorum. Only used when ClickHouse is deployed in-cluster.                                                                             | number       | 3                       |    no    |
+| clickhouse_storage_size             | Size of the persistent volume of each ClickHouse replica                                                                                                                                                  | string       | "100Gi"                 |    no    |
+| clickhouse_keeper_storage_size      | Size of the persistent volume of each ClickHouse Keeper replica                                                                                                                                           | string       | "10Gi"                  |    no    |
+| clickhouse_storage_class            | StorageClass used for the ClickHouse and ClickHouse Keeper volumes                                                                                                                                        | string       | "premium-rwo"           |    no    |
+| clickhouse_resources                | Resource requests for each ClickHouse replica. On GKE Autopilot the limits default to the requests.                                                                                                       | object       | { cpu = "2", memory = "8Gi" } | no |
+| clickhouse_operator_chart_version   | Version of the ClickHouse operator and ClickHouse cluster Helm charts (kept in lockstep)                                                                                                                  | string       | "0.0.7"                 |    no    |
+| cert_manager_chart_version          | Version of the cert-manager Helm chart. cert-manager issues the certificates for the ClickHouse operator admission webhooks.                                                                              | string       | "v1.21.0"               |    no    |
+| external_clickhouse                 | Use an external ClickHouse deployment (e.g. ClickHouse Cloud) instead of deploying ClickHouse into the GKE cluster. See [External ClickHouse](#external-clickhouse-bring-your-own).                       | object       | null                    |    no    |
+| external_clickhouse_password        | Password for the external ClickHouse user. Required when external_clickhouse is set.                                                                                                                      | string       | ""                      |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
 | create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
