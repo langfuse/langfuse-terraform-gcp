@@ -1,6 +1,8 @@
 locals {
-  langfuse_values   = <<EOT
+  langfuse_values = <<EOT
 langfuse:
+  image:
+    tag: ${jsonencode(var.app_version)}
   salt:
     secretKeyRef:
       name: ${kubernetes_secret.langfuse.metadata[0].name}
@@ -56,10 +58,6 @@ postgresql:
     existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
     secretKeys:
       userPasswordKey: postgres-password
-clickhouse:
-  auth:
-    existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
-    existingSecretKey: clickhouse-password
 redis:
   deploy: false
   host: ${google_redis_instance.this.host}
@@ -81,6 +79,56 @@ s3:
   mediaUpload:
     prefix: "media/"
 EOT
+
+  # In-cluster ClickHouse: the Langfuse Helm chart v2 renders ClickHouseCluster
+  # and KeeperCluster resources reconciled by the ClickHouse operator (see
+  # clickhouse.tf).
+  clickhouse_internal_values = !local.deploy_clickhouse ? "" : <<EOT
+clickhouse:
+  deploy: true
+  auth:
+    existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
+    existingSecretKey: clickhouse-password
+  cluster:
+    replicas: ${var.clickhouse_replicas}
+    storage:
+      size: ${var.clickhouse_storage_size}
+      className: ${var.clickhouse_storage_class}
+    resources:
+      requests:
+        cpu: ${jsonencode(var.clickhouse_resources.cpu)}
+        memory: ${jsonencode(var.clickhouse_resources.memory)}
+      limits:
+        cpu: ${jsonencode(var.clickhouse_resources.cpu)}
+        memory: ${jsonencode(var.clickhouse_resources.memory)}
+  keeper:
+    replicas: ${var.clickhouse_keeper_replicas}
+    storage:
+      size: ${var.clickhouse_keeper_storage_size}
+      className: ${var.clickhouse_storage_class}
+EOT
+
+  # External ClickHouse: skip the in-cluster deployment and point Langfuse at
+  # the provided instance.
+  clickhouse_external_values = local.deploy_clickhouse ? "" : <<EOT
+clickhouse:
+  deploy: false
+  host: ${jsonencode(var.external_clickhouse.host)}
+  httpPort: ${var.external_clickhouse.http_port}
+  nativePort: ${var.external_clickhouse.native_port}
+  database: ${jsonencode(var.external_clickhouse.database)}
+  cluster:
+    enabled: ${var.external_clickhouse.cluster_enabled}
+  auth:
+    username: ${jsonencode(var.external_clickhouse.username)}
+    existingSecret: ${kubernetes_secret.langfuse.metadata[0].name}
+    existingSecretKey: clickhouse-password
+  migration:
+    ssl: ${var.external_clickhouse.migration_ssl}
+EOT
+
+  clickhouse_values = local.deploy_clickhouse ? local.clickhouse_internal_values : local.clickhouse_external_values
+
   ingress_values    = <<EOT
 langfuse:
   ingress:
@@ -165,7 +213,7 @@ resource "kubernetes_secret" "langfuse" {
     "postgres-password"   = random_password.postgres_password.result
     "salt"                = random_bytes.salt.base64
     "nextauth-secret"     = random_bytes.nextauth_secret.base64
-    "clickhouse-password" = random_password.clickhouse_password.result
+    "clickhouse-password" = local.deploy_clickhouse ? random_password.clickhouse_password.result : var.external_clickhouse_password
     "encryption_key"      = var.use_encryption_key ? random_bytes.encryption_key[0].hex : ""
   }
 }
@@ -179,6 +227,7 @@ resource "helm_release" "langfuse" {
 
   values = concat([
     local.langfuse_values,
+    local.clickhouse_values,
     local.ingress_values,
     local.encryption_values,
   ], var.additional_helm_values)
@@ -186,7 +235,15 @@ resource "helm_release" "langfuse" {
   depends_on = [
     kubernetes_secret.langfuse,
     google_service_account.langfuse,
+    helm_release.clickhouse_operator,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = var.external_clickhouse == null || var.external_clickhouse_password != ""
+      error_message = "external_clickhouse_password must be set when external_clickhouse is configured."
+    }
+  }
 
   timeout = 1800 # Increase timeout to 15 minutes
 }

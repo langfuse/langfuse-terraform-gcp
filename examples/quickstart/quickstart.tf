@@ -16,14 +16,18 @@ module "langfuse" {
   # Optional: Configure the database instances
   database_instance_tier              = "db-perf-optimized-N-2"
   database_instance_availability_type = "REGIONAL"
-  database_instance_edition = "ENTERPRISE_PLUS"
+  database_instance_edition           = "ENTERPRISE_PLUS"
 
   # Optional: Configure the cache
   cache_tier           = "STANDARD_HA"
   cache_memory_size_gb = 1
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "1.5.14"
+  langfuse_chart_version = "2.0.0"
+
+  # Optional: Pin the Langfuse application version (defaults to the latest
+  # release at the time this module version was published)
+  app_version = "4.14.0"
 }
 
 provider "kubernetes" {
