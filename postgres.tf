@@ -41,7 +41,7 @@ resource "google_sql_database_instance" "this" {
       error_message = "db-perf-optimized-* machine types require database_instance_edition = \"ENTERPRISE_PLUS\"."
     }
     precondition {
-      condition     = var.database_transaction_log_retention_days == null || var.database_instance_edition == "ENTERPRISE_PLUS" || var.database_transaction_log_retention_days <= 7
+      condition     = var.database_transaction_log_retention_days == null ? true : (var.database_instance_edition == "ENTERPRISE_PLUS" || var.database_transaction_log_retention_days <= 7)
       error_message = "Cloud SQL edition ENTERPRISE supports a transaction log retention of at most 7 days. Lower database_transaction_log_retention_days or use ENTERPRISE_PLUS."
     }
   }

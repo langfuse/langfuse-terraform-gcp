@@ -51,7 +51,9 @@ variable "database_transaction_log_retention_days" {
   default     = null
 
   validation {
-    condition     = var.database_transaction_log_retention_days == null || (var.database_transaction_log_retention_days >= 1 && var.database_transaction_log_retention_days <= 35)
+    # Ternary instead of ||: Terraform 1.3 does not short-circuit logical
+    # operators, so comparisons against the null default would error.
+    condition     = var.database_transaction_log_retention_days == null ? true : (var.database_transaction_log_retention_days >= 1 && var.database_transaction_log_retention_days <= 35)
     error_message = "database_transaction_log_retention_days must be between 1 and 35."
   }
 }
