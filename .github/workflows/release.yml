@@ -1,17 +1,8 @@
 name: Release
 
-# Releasing is two steps, because `main` is protected and direct pushes are
-# rejected:
-#
-#   1. Run this workflow manually with the new version. It opens a pull request
-#      that bumps the module version documented in the README.
-#   2. Merge that pull request. The `tag` job then reconciles tags with the
-#      version declared in the README on `main`: it creates and pushes the
-#      matching tag and a GitHub release.
-#
-# The README `?ref=` value is therefore the single source of truth for the
-# module version, and step 2 is idempotent - a README change that does not
-# change the version is a no-op.
+# Run this workflow with the new version to open the release pull request.
+# Merging it publishes the version the README documents, the same way
+# langfuse-k8s releases charts from Chart.yaml on main.
 
 on:
   workflow_dispatch:
@@ -24,142 +15,70 @@ on:
     branches: [main]
     paths: ["README.md"]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 concurrency:
-  group: release
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   prepare:
-    name: Prepare release
+    name: Open release pull request
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Commit the version bump.
+      pull-requests: write # Open the release pull request.
+
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Bump documented module version
-        id: bump
+      - name: Bump the documented module version
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Unsupported version format: '$VERSION'" >&2; exit 1; }
+          perl -pi -e 's{\?ref=[^"]+}{?ref=$ENV{VERSION}}g' README.md
+          git diff --quiet -- README.md && { echo "README.md already documents $VERSION" >&2; exit 1; }
+          exit 0
 
-          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
-            echo "::error::'$VERSION' is not a valid version (expected X.Y.Z or X.Y.Z-rc.N)"
-            exit 1
-          fi
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ inputs.version }}"
+          title: "chore: bump version to ${{ inputs.version }}"
+          body: "Merging this creates the `${{ inputs.version }}` tag and publishes a GitHub release."
+          branch: release/${{ inputs.version }}
+          delete-branch: true
 
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "::error::tag $VERSION already exists"
-            exit 1
-          fi
-
-          current="$(grep -oE '\?ref=[^"]+' README.md | head -1 | cut -d= -f2)"
-          if [ -z "$current" ]; then
-            echo "::error::could not find a '?ref=' module version in README.md"
-            exit 1
-          fi
-          if [ "$current" = "$VERSION" ]; then
-            echo "::error::README.md already documents version $VERSION"
-            exit 1
-          fi
-
-          OLD="$current" NEW="$VERSION" perl -pi -e \
-            's/\?ref=\Q$ENV{OLD}\E\b/?ref=$ENV{NEW}/g' README.md
-
-          if [ -z "$(git diff --name-only)" ]; then
-            echo "::error::no README.md changes produced for $VERSION"
-            exit 1
-          fi
-
-          echo "previous=$current" >> "$GITHUB_OUTPUT"
-          echo "$current -> $VERSION" >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-
-      # Pull requests opened with GITHUB_TOKEN do not trigger other workflows,
-      # so validate here instead of relying on ci.yml.
-      - name: Validate configuration
-        run: |
-          set -euo pipefail
-          terraform fmt -check -diff -recursive
-          for dir in . examples/quickstart examples/external-clickhouse; do
-            echo "::group::validate $dir"
-            terraform -chdir="$dir" init -backend=false -input=false
-            terraform -chdir="$dir" validate
-            echo "::endgroup::"
-          done
-
-      - name: Open release pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ inputs.version }}
-          PREVIOUS: ${{ steps.bump.outputs.previous }}
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          branch="release/$VERSION"
-          git switch -C "$branch"
-          git commit -aqm "chore: bump version to $VERSION"
-          git push --force -q origin "$branch"
-
-          # Built line by line so no YAML indentation leaks into the body,
-          # where indented lines would render as code blocks.
-          body="$(printf '%s\n' \
-            "Releases \`$VERSION\` (previously \`$PREVIOUS\`)." \
-            "" \
-            "Merging this pull request creates and pushes the \`$VERSION\` tag and a GitHub release, via the \`tag\` job of [\`release.yml\`](.github/workflows/release.yml)." \
-            "" \
-            "\`terraform fmt -check\` and \`terraform validate\` (root module and both examples) ran in the job that opened this PR, because pull requests created by \`GITHUB_TOKEN\` do not trigger \`ci.yml\`.")"
-
-          # --base is omitted so gh targets the repository's default branch.
-          gh pr create --head "$branch" \
-            --title "chore: bump version to $VERSION" \
-            --body "$body"
-
-  tag:
-    name: Tag released version
+  release:
+    name: Tag and publish release
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
+    permissions:
+      contents: write # Create the tag and the GitHub release.
 
-      - name: Create tag and release if the documented version is new
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A no-op unless the README names a version that has no tag yet, so
+      # ordinary README edits pass through untouched.
+      - name: Tag and release the documented version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-
-          version="$(grep -oE '\?ref=[^"]+' README.md | head -1 | cut -d= -f2)"
-          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
-            echo "README.md documents '$version', which is not a release version - nothing to tag."
+          VERSION=$(grep -oE '\?ref=[^"]+' README.md | head -1 | cut -d= -f2)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "README.md documents '$VERSION', which is not a release version."; exit 0; }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists."
             exit 0
           fi
-
-          if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
-            echo "tag $version already exists - nothing to do."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "$version" -m "Release $version"
-          git push -q origin "refs/tags/$version"
-
-          # Previous releases were tags only; the generated notes are additive.
-          prerelease=""
-          case "$version" in *-rc.*) prerelease="--prerelease" ;; esac
-          # shellcheck disable=SC2086
-          gh release create "$version" --title "$version" --generate-notes $prerelease
-
-          echo "released $version" >> "$GITHUB_STEP_SUMMARY"
+          # Creates the tag at this commit along with the release.
+          gh release create "$VERSION" --title "$VERSION" --generate-notes --target "$GITHUB_SHA"
