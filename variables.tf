@@ -45,6 +45,19 @@ variable "database_instance_availability_type" {
   default     = "REGIONAL"
 }
 
+variable "database_transaction_log_retention_days" {
+  description = "Days of transaction logs retained for point-in-time recovery. Only applies while database_pitr_enabled is true. Defaults to the edition maximum-compatible value: 14 for ENTERPRISE_PLUS (the Cloud SQL default), 7 for ENTERPRISE (its allowed maximum)."
+  type        = number
+  default     = null
+
+  validation {
+    # Ternary instead of ||: Terraform 1.3 does not short-circuit logical
+    # operators, so comparisons against the null default would error.
+    condition     = var.database_transaction_log_retention_days == null ? true : (var.database_transaction_log_retention_days >= 1 && var.database_transaction_log_retention_days <= 35)
+    error_message = "database_transaction_log_retention_days must be between 1 and 35."
+  }
+}
+
 variable "database_backup_enabled" {
   description = "Whether to enable Cloud SQL automated backups"
   type        = bool
