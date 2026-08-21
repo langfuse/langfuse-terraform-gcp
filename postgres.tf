@@ -1,7 +1,7 @@
 resource "google_sql_database_instance" "this" {
   name             = var.name
   region           = data.google_client_config.current.region
-  database_version = "POSTGRES_15"
+  database_version = var.postgres_version
 
   settings {
     tier                        = var.database_instance_tier
