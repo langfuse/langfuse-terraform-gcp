@@ -61,26 +61,29 @@ provider "helm" {
 }
 ```
 
-2. Apply the DNS zone and the GKE Cluster. This avoids an error around missing dependencies on the [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775).
+3. Apply the DNS zone and the GKE Cluster.
 
 ```bash
 terraform init
 terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
 ```
 
-3. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
+> [!IMPORTANT]
+> **The two-stage apply is the supported installation flow, not a workaround.** The `kubernetes` and `helm` providers are configured from this module's outputs, so the GKE cluster must exist before Terraform can plan any Kubernetes or Helm resources (see [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775)). This also applies when you embed this module in a larger Terraform configuration: plan on creating the cluster in a first targeted apply (or a separate pipeline stage) before applying the full stack.
+
+4. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
 
 ```bash
 $ gcloud dns managed-zones describe langfuse --format="get(nameServers)"
 ```
 
-4. Apply the full stack
+5. Apply the full stack
 
 ```bash
 terraform apply
 ```
 
-5. Start using Langfuse by navigating to `https://<domain>` in your browser.
+6. Start using Langfuse by navigating to `https://<domain>` in your browser.
 
 ### Known issues
 
@@ -162,7 +165,9 @@ Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node d
 
 ### Migrating from module versions <= 0.3.x
 
-Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. **Upgrading is a breaking change**: the operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. Existing installations must migrate in two steps:
+This module version is a **clean Langfuse v4 installation based on v2.0.0 of the Langfuse Helm chart**. It does not migrate existing deployments.
+
+Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. If you upgrade an existing installation, you must perform the migration steps **manually, outside of Terraform**, before switching the module version:
 
 1. Migrate the chart deployment (copying the ClickHouse data) following the [chart v1 → v2 migration guide](https://github.com/langfuse/langfuse-k8s/tree/main/examples/upgrade-v1-to-v2).
 2. Upgrade the application following the [Langfuse v3 → v4 upgrade guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4).
