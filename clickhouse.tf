@@ -29,6 +29,12 @@ resource "helm_release" "cert_manager" {
   values = [<<EOT
 crds:
   enabled: true
+# GKE Autopilot denies lease creation in the managed kube-system namespace,
+# which is where cert-manager runs leader election by default. Without this
+# override cainjector never becomes leader and never injects the webhook CA.
+global:
+  leaderElection:
+    namespace: cert-manager
 resources:
   requests:
     cpu: 50m
