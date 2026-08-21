@@ -45,6 +45,10 @@ cainjector:
       memory: 128Mi
 EOT
   ]
+
+  # Autopilot provisions nodes on demand; first installs can exceed the
+  # default 300s while the three cert-manager deployments come up.
+  timeout = 600
 }
 
 # Official ClickHouse Kubernetes operator. The Langfuse Helm chart v2 renders
@@ -60,6 +64,11 @@ resource "helm_release" "clickhouse_operator" {
   version          = var.clickhouse_operator_chart_version
   namespace        = "clickhouse-operator-system"
   create_namespace = true
+
+  # Waiting (helm provider default) matters here: the operator deployment only
+  # becomes ready once cert-manager has issued its webhook certificate, and the
+  # Langfuse chart requires the operator CRDs and webhook to exist.
+  timeout = 600
 
   depends_on = [helm_release.cert_manager]
 }
