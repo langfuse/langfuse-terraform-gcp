@@ -236,3 +236,9 @@ variable "provision_static_ip" {
   type        = bool
   default     = false
 }
+
+variable "postgres_version" {
+  description = "Version of PostgreSQL to use for the database instance"
+  type        = string
+  default     = "POSTGRES_16"
+}
