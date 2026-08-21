@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.3"
 
   required_providers {
     google = {
@@ -24,7 +24,7 @@ terraform {
 
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.0"
+      version = "~> 2.7" # OCI registry support is required for the ClickHouse operator chart
     }
   }
 }

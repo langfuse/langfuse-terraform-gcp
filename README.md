@@ -39,7 +39,11 @@ module "langfuse" {
   subnetwork_cidr = "10.0.0.0/16"
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "1.5.14"
+  langfuse_chart_version = "2.0.0"
+
+  # Optional: Pin the Langfuse application version. Defaults to the latest
+  # release at the time this module version was published.
+  app_version = "4.14.0"
 }
 
 provider "kubernetes" {
@@ -57,26 +61,29 @@ provider "helm" {
 }
 ```
 
-2. Apply the DNS zone and the GKE Cluster. This avoids an error around missing dependencies on the [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775).
+3. Apply the DNS zone and the GKE Cluster.
 
 ```bash
 terraform init
 terraform apply --target module.langfuse.google_dns_managed_zone.this --target module.langfuse.google_container_cluster.this
 ```
 
-3. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
+> [!IMPORTANT]
+> **The two-stage apply is the supported installation flow, not a workaround.** The `kubernetes` and `helm` providers are configured from this module's outputs, so the GKE cluster must exist before Terraform can plan any Kubernetes or Helm resources (see [kubernetes_manifest](https://github.com/hashicorp/terraform-provider-kubernetes/issues/1775)). This also applies when you embed this module in a larger Terraform configuration: plan on creating the cluster in a first targeted apply (or a separate pipeline stage) before applying the full stack.
+
+4. Set up the Nameserver delegation on your DNS provider. You can find the nameservers using the following command. Replace `langfuse` with your zone name, e.g. `langfuse-example-com`.
 
 ```bash
 $ gcloud dns managed-zones describe langfuse --format="get(nameServers)"
 ```
 
-4. Apply the full stack
+5. Apply the full stack
 
 ```bash
 terraform apply
 ```
 
-5. Start using Langfuse by navigating to `https://<domain>` in your browser.
+6. Start using Langfuse by navigating to `https://<domain>` in your browser.
 
 ### Known issues
 
@@ -109,10 +116,63 @@ This module creates a complete Langfuse stack with the following components:
 - Cloud SQL PostgreSQL instance
 - Cloud Memorystore Redis instance
 - Cloud Storage bucket for storage
+- ClickHouse cluster managed by the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) (including ClickHouse Keeper and cert-manager), or optionally an external ClickHouse such as ClickHouse Cloud
 - TLS certificates and Cloud DNS configuration
 - Required IAM roles and firewall rules
 - GKE Ingress Controller for ingress
 - Filestore CSI Driver for persistent storage
+
+## Langfuse version
+
+The module deploys the Langfuse Helm chart v2 (`langfuse_chart_version`), which ships [Langfuse v4](https://langfuse.com/docs/v4). The Langfuse application version is pinned explicitly through the `app_version` variable, which defaults to the latest Langfuse release at the time the module version was published. To upgrade Langfuse, set `app_version` to a newer [release](https://github.com/langfuse/langfuse/releases):
+
+```hcl
+module "langfuse" {
+  # ...
+  app_version = "4.14.0"
+}
+```
+
+## ClickHouse
+
+By default the Langfuse Helm chart v2 deploys a ClickHouse cluster into the GKE cluster through the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) (`ClickHouseCluster` and `KeeperCluster` resources). To support this, the module installs:
+
+- [cert-manager](https://cert-manager.io/) (required by the operator to issue its admission webhook certificates)
+- The ClickHouse operator (`oci://ghcr.io/clickhouse/clickhouse-operator-helm`)
+
+The deployment can be sized with the `clickhouse_replicas`, `clickhouse_resources`, `clickhouse_storage_size`, `clickhouse_storage_class`, `clickhouse_keeper_replicas`, and `clickhouse_keeper_storage_size` variables.
+
+### External ClickHouse (bring your own)
+
+To use an existing ClickHouse instead — for example [ClickHouse Cloud](https://clickhouse.com/cloud) — set `external_clickhouse`. The module then skips cert-manager, the operator, and the in-cluster ClickHouse entirely. See [examples/external-clickhouse](examples/external-clickhouse/external-clickhouse.tf) for a full example.
+
+```hcl
+module "langfuse" {
+  source = "github.com/langfuse/langfuse-terraform-gcp"
+
+  domain = "langfuse.example.com"
+
+  external_clickhouse = {
+    host = "https://abc123.europe-west4.gcp.clickhouse.cloud"
+    # Defaults: http_port = 8443, native_port = 9440, username = "default",
+    # database = "default", cluster_enabled = true, migration_ssl = true
+  }
+  external_clickhouse_password = var.clickhouse_password
+}
+```
+
+Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node deployments. Make sure the GKE cluster can reach the external ClickHouse (for ClickHouse Cloud, check the IP allowlist or use Private Service Connect).
+
+### Migrating from module versions <= 0.3.x
+
+This module version is a **clean Langfuse v4 installation based on v2.0.0 of the Langfuse Helm chart**. It does not migrate existing deployments.
+
+Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. If you upgrade an existing installation, you must perform the migration steps **manually, outside of Terraform**, before switching the module version:
+
+1. Migrate the chart deployment (copying the ClickHouse data) following the [chart v1 → v2 migration guide](https://github.com/langfuse/langfuse-k8s/tree/main/examples/upgrade-v1-to-v2).
+2. Upgrade the application following the [Langfuse v3 → v4 upgrade guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4).
+
+New installations are unaffected. If you need to stay on the Bitnami-based deployment for now, pin this module to `0.3.x`.
 
 ## Additional Environment Variables
 
@@ -160,11 +220,11 @@ module "langfuse" {
 
 | Name        | Version |
 |-------------|---------|
-| terraform   | >= 1.0  |
+| terraform   | >= 1.3  |
 | google      | >= 5.0  |
 | google-beta | >= 5.0  |
 | kubernetes  | >= 2.10 |
-| helm        | >= 2.5  |
+| helm        | >= 2.7  |
 
 ## Providers
 
@@ -173,7 +233,7 @@ module "langfuse" {
 | google      | >= 5.0  |
 | google-beta | >= 5.0  |
 | kubernetes  | >= 2.10 |
-| helm        | >= 2.5  |
+| helm        | >= 2.7  |
 | random      | >= 3.0  |
 | tls         | >= 3.0  |
 
@@ -204,6 +264,7 @@ module "langfuse" {
 | kubernetes_secret.langfuse                  | resource |
 | helm_release.ingress_nginx                  | resource |
 | helm_release.cert_manager                   | resource |
+| helm_release.clickhouse_operator            | resource |
 | random_password.database                    | resource |
 | tls_private_key.langfuse                    | resource |
 
@@ -222,7 +283,18 @@ module "langfuse" {
 | cache_tier                          | The service tier of the instance                                                                                                                                                                          | string       | "STANDARD_HA"           |    no    |
 | cache_memory_size_gb                | Redis memory size in GB                                                                                                                                                                                   | number       | 1                       |    no    |
 | deletion_protection                 | Whether or not to enable deletion_protection on data sensitive resources                                                                                                                                  | bool         | true                    |    no    |
-| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "1.5.14"                |    no    |
+| clickhouse_replicas                 | Number of ClickHouse replicas (single shard). The default of 3 provides a highly available setup. Only used when ClickHouse is deployed in-cluster.                                                       | number       | 3                       |    no    |
+| clickhouse_keeper_replicas          | Number of ClickHouse Keeper replicas. Must be 1, 3 or 5 to maintain quorum. Only used when ClickHouse is deployed in-cluster.                                                                             | number       | 3                       |    no    |
+| clickhouse_storage_size             | Size of the persistent volume of each ClickHouse replica                                                                                                                                                  | string       | "100Gi"                 |    no    |
+| clickhouse_keeper_storage_size      | Size of the persistent volume of each ClickHouse Keeper replica                                                                                                                                           | string       | "10Gi"                  |    no    |
+| clickhouse_storage_class            | StorageClass used for the ClickHouse and ClickHouse Keeper volumes                                                                                                                                        | string       | "premium-rwo"           |    no    |
+| clickhouse_resources                | Resource requests and limits for each ClickHouse replica                                                                                                                                                  | object       | { cpu = "2", memory = "8Gi" } | no |
+| clickhouse_operator_chart_version   | Version of the ClickHouse operator Helm chart. The default matches the version the Langfuse Helm chart is tested against.                                                                                 | string       | "0.0.5"                 |    no    |
+| cert_manager_chart_version          | Version of the cert-manager Helm chart. cert-manager issues the certificates for the ClickHouse operator admission webhooks.                                                                              | string       | "v1.20.2"               |    no    |
+| external_clickhouse                 | Use an external ClickHouse deployment (e.g. ClickHouse Cloud) instead of deploying ClickHouse into the GKE cluster. See [External ClickHouse](#external-clickhouse-bring-your-own).                       | object       | null                    |    no    |
+| external_clickhouse_password        | Password for the external ClickHouse user. Required when external_clickhouse is set.                                                                                                                      | string       | ""                      |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "2.0.0"                 |    no    |
+| app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.14.0"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
 | create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
 | provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
