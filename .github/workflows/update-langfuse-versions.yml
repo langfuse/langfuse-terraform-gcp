@@ -1,0 +1,181 @@
+name: Update Langfuse versions
+
+# Checks weekly whether a newer Langfuse Helm chart or Langfuse application
+# release exists and, if so, opens (or updates) a single pull request bumping
+# the module defaults. The PR is never merged automatically.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays, 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-langfuse-versions
+
+env:
+  UPDATE_BRANCH: chore/langfuse-version-updates
+
+jobs:
+  update:
+    name: Check for new versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve current and latest versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          semver='^[0-9]+\.[0-9]+\.[0-9]+$'
+
+          # Defaults declared by the module are the source of truth for "current".
+          read_default() {
+            sed -n "/^variable \"$1\"/,/^}/p" variables.tf \
+              | sed -n 's/^  default *= *"\(.*\)"$/\1/p'
+          }
+          chart_current="$(read_default langfuse_chart_version)"
+          app_current="$(read_default app_version)"
+
+          # Helm chart releases live in langfuse/langfuse-k8s, tagged langfuse-X.Y.Z.
+          # That repo also tags other charts, so filter and pick the highest semver.
+          chart_latest="$(gh api 'repos/langfuse/langfuse-k8s/releases?per_page=100' \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+            | sed -n 's/^langfuse-//p' | grep -E "$semver" | sort -V | tail -1)"
+
+          # Langfuse application: newest stable release, tagged vX.Y.Z.
+          app_latest="$(gh api repos/langfuse/langfuse/releases/latest --jq '.tag_name' | sed 's/^v//')"
+
+          for pair in "chart_current:$chart_current" "app_current:$app_current" \
+                      "chart_latest:$chart_latest" "app_latest:$app_latest"; do
+            if ! printf '%s' "${pair#*:}" | grep -qE "$semver"; then
+              echo "::error::${pair%%:*} is not a valid semver value (got '${pair#*:}')"
+              exit 1
+            fi
+          done
+
+          {
+            echo "chart_current=$chart_current"
+            echo "app_current=$app_current"
+            echo "chart_latest=$chart_latest"
+            echo "app_latest=$app_latest"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$chart_current" = "$chart_latest" ] && [ "$app_current" = "$app_latest" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "chart: $chart_current -> $chart_latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "app:   $app_current -> $app_latest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply version bumps
+        if: steps.versions.outputs.changed == 'true'
+        env:
+          CHART_CURRENT: ${{ steps.versions.outputs.chart_current }}
+          CHART_LATEST: ${{ steps.versions.outputs.chart_latest }}
+          APP_CURRENT: ${{ steps.versions.outputs.app_current }}
+          APP_LATEST: ${{ steps.versions.outputs.app_latest }}
+        run: |
+          set -euo pipefail
+
+          # Each version is documented in several places (variables.tf defaults,
+          # README usage snippets and inputs table, examples). Replace the exact
+          # version string across tracked Terraform and Markdown files; the
+          # lookarounds keep it from matching inside a longer version number.
+          bump() {
+            [ "$1" = "$2" ] && return 0
+            git ls-files -z '*.tf' '*.md' \
+              | OLD="$1" NEW="$2" xargs -0 perl -pi -e \
+                  's/(?<![0-9.])\Q$ENV{OLD}\E(?![0-9.])/$ENV{NEW}/g'
+          }
+          bump "$CHART_CURRENT" "$CHART_LATEST"
+          bump "$APP_CURRENT" "$APP_LATEST"
+
+          # Fail loudly if the authoritative defaults did not actually change,
+          # which would mean the file layout drifted from what bump() expects.
+          read_default() {
+            sed -n "/^variable \"$1\"/,/^}/p" variables.tf \
+              | sed -n 's/^  default *= *"\(.*\)"$/\1/p'
+          }
+          for pair in "langfuse_chart_version:$CHART_LATEST" "app_version:$APP_LATEST"; do
+            got="$(read_default "${pair%%:*}")"
+            if [ "$got" != "${pair#*:}" ]; then
+              echo "::error::${pair%%:*} default is '$got', expected '${pair#*:}'"
+              exit 1
+            fi
+          done
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        if: steps.versions.outputs.changed == 'true'
+
+      # Pull requests opened with GITHUB_TOKEN do not trigger other workflows,
+      # so validate the bumped tree here instead of relying on ci.yml.
+      - name: Validate bumped configuration
+        if: steps.versions.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          terraform fmt -check -diff -recursive
+          for dir in . examples/quickstart examples/external-clickhouse; do
+            echo "::group::validate $dir"
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+            echo "::endgroup::"
+          done
+
+      - name: Open or update pull request
+        if: steps.versions.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_CURRENT: ${{ steps.versions.outputs.chart_current }}
+          CHART_LATEST: ${{ steps.versions.outputs.chart_latest }}
+          APP_CURRENT: ${{ steps.versions.outputs.app_current }}
+          APP_LATEST: ${{ steps.versions.outputs.app_latest }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          title="chore: update Langfuse versions"
+          body=""
+          summary=""
+
+          if [ "$CHART_CURRENT" != "$CHART_LATEST" ]; then
+            summary="chart $CHART_CURRENT -> $CHART_LATEST"
+            body="$body- Helm chart \`$CHART_CURRENT\` → [\`$CHART_LATEST\`](https://github.com/langfuse/langfuse-k8s/releases/tag/langfuse-$CHART_LATEST)"
+            if [ "${CHART_CURRENT%%.*}" != "${CHART_LATEST%%.*}" ]; then
+              body="$body — **major chart bump: review the chart release notes and migration guide before merging**"
+            fi
+            body="$body"$'\n'
+          fi
+
+          if [ "$APP_CURRENT" != "$APP_LATEST" ]; then
+            [ -n "$summary" ] && summary="$summary, "
+            summary="${summary}app $APP_CURRENT -> $APP_LATEST"
+            body="$body- Langfuse application \`$APP_CURRENT\` → [\`$APP_LATEST\`](https://github.com/langfuse/langfuse/releases/tag/v$APP_LATEST)"
+            if [ "${APP_CURRENT%%.*}" != "${APP_LATEST%%.*}" ]; then
+              body="$body — **major application bump: check the Langfuse upgrade guides before merging**"
+            fi
+            body="$body"$'\n'
+          fi
+
+          body="$body"$'\n''`terraform fmt -check` and `terraform validate` (root module and both examples) ran in the job that opened this PR, because pull requests created by `GITHUB_TOKEN` do not trigger `ci.yml`. Close and reopen this PR to run the full matrix.'
+          body="$body"$'\n\n''Opened automatically by [`update-langfuse-versions.yml`](.github/workflows/update-langfuse-versions.yml).'
+
+          git switch -C "$UPDATE_BRANCH"
+          git commit -aqm "$title" -m "$summary"
+          git push --force -q origin "$UPDATE_BRANCH"
+
+          if [ -n "$(gh pr list --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')" ]; then
+            echo "existing pull request updated with $summary"
+          else
+            # --base is omitted so gh targets the repository's default branch.
+            gh pr create --head "$UPDATE_BRANCH" --title "$title" --body "$body"
+          fi
