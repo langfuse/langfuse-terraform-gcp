@@ -155,3 +155,7 @@ terragrunt-debug.tfvars.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/terraform,terragrunt,intellij+all,visualstudiocode
+
+# Dependency lock files are not used for reusable modules; CI intentionally
+# resolves providers fresh to catch breaking provider releases.
+.terraform.lock.hcl
