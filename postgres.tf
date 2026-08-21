@@ -15,7 +15,8 @@ resource "google_sql_database_instance" "this" {
       # Pin the retention explicitly: the valid range depends on the edition
       # (1-7 days on ENTERPRISE, 1-35 on ENTERPRISE_PLUS), and relying on
       # API-side defaults produced out-of-range values on ENTERPRISE.
-      transaction_log_retention_days = var.database_pitr_enabled ? coalesce(var.database_transaction_log_retention_days, var.database_instance_edition == "ENTERPRISE_PLUS" ? 14 : 7) : null
+      # No coalesce() here: Terraform 1.3 rejects null arguments to it.
+      transaction_log_retention_days = !var.database_pitr_enabled ? null : (var.database_transaction_log_retention_days != null ? var.database_transaction_log_retention_days : (var.database_instance_edition == "ENTERPRISE_PLUS" ? 14 : 7))
     }
 
     ip_configuration {
