@@ -40,7 +40,7 @@ module "langfuse" {
 
   # Optional: Pin the Langfuse application version. Defaults to the latest
   # release at the time this module version was published.
-  app_version = "4.14.0"
+  app_version = "4.16.0"
 }
 
 provider "kubernetes" {
@@ -126,7 +126,7 @@ The module deploys the Langfuse Helm chart v2 (`langfuse_chart_version`), which 
 ```hcl
 module "langfuse" {
   # ...
-  app_version = "4.14.0"
+  app_version = "4.16.0"
 }
 ```
 
@@ -293,7 +293,7 @@ module "langfuse" {
 | external_clickhouse                 | Use an external ClickHouse deployment (e.g. ClickHouse Cloud) instead of deploying ClickHouse into the GKE cluster. See [External ClickHouse](#external-clickhouse-bring-your-own).                       | object       | null                    |    no    |
 | external_clickhouse_password        | Password for the external ClickHouse user. Required when external_clickhouse is set.                                                                                                                      | string       | ""                      |    no    |
 | langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "2.0.0"                 |    no    |
-| app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.14.0"                |    no    |
+| app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.16.0"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
 | create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
 | provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
