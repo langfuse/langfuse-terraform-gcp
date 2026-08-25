@@ -162,14 +162,43 @@ Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node d
 
 ### Migrating from module versions <= 0.3.x
 
-This module version is a **clean Langfuse v4 installation based on v2.0.1 of the Langfuse Helm chart**. It does not migrate existing deployments.
+See [Upgrading from 0.3.x to 1.x](#upgrading-from-03x-to-1x).
 
-Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. If you upgrade an existing installation, you must perform the migration steps **manually, outside of Terraform**, before switching the module version:
+## Upgrading from 0.3.x to 1.x
 
-1. Migrate the chart deployment (copying the ClickHouse data) following the [chart v1 → v2 migration guide](https://github.com/langfuse/langfuse-k8s/tree/main/examples/upgrade-v1-to-v2).
+`1.x` is a **clean Langfuse v4 installation on Helm chart v2**. It does not migrate an existing deployment for you, and there are changes here that touch live infrastructure — read this before you apply. New installations can skip the whole section.
+
+### 1. Migrate the Langfuse deployment yourself, first
+
+`0.3.x` deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse in chart v2 starts empty, and the chart deliberately refuses an in-place `helm upgrade` that would replace leftover Bitnami volumes. Do these two steps **manually, outside of Terraform**, before switching the module version:
+
+1. Migrate the chart deployment, copying the ClickHouse data, following the [chart v1 → v2 migration guide](https://github.com/langfuse/langfuse-k8s/tree/main/examples/upgrade-v1-to-v2).
 2. Upgrade the application following the [Langfuse v3 → v4 upgrade guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4).
 
-New installations are unaffected. If you need to stay on the Bitnami-based deployment for now, pin this module to `0.3.x`.
+If you point Terraform at `1.x` without migrating, the Helm chart's own guard fails the release rather than replacing your data. That is the protection working, not a bug.
+
+### 2. Two defaults now change existing infrastructure
+
+No variables were removed or renamed between `0.3.x` and `1.x`, so your existing `module` block keeps working — but two defaults behave differently against infrastructure that already exists:
+
+| Default | `0.3.x` | `1.x` | What to do |
+|---|---|---|---|
+| `postgres_version` | hard-coded `POSTGRES_15` | variable, defaults to `POSTGRES_16` | Applying with defaults asks Cloud SQL for an **in-place major version upgrade**, which is disruptive and cannot be rolled back. Set `postgres_version = "POSTGRES_15"` to keep your current version, and upgrade Postgres as a separate, deliberate change. |
+| `database_transaction_log_retention_days` | unset, left to the API | pinned (14 on `ENTERPRISE_PLUS`, 7 on `ENTERPRISE`) | Expect a settings update on the instance. Set the variable explicitly if you rely on a different retention. |
+
+### 3. What else the plan will show
+
+- **Added:** `helm_release.cert_manager` and `helm_release.clickhouse_operator`, plus their namespaces. cert-manager issues the ClickHouse operator's webhook certificates; both are prerequisites of chart v2 and are additive.
+- **Changed:** the Langfuse release moves from chart `1.5.x` to `2.x`, with the new ClickHouse values.
+- **Tooling floor:** Terraform `>= 1.3` and the `helm` provider `~> 2.7` (OCI registry support). Upgrade your provider lock file with `terraform init -upgrade`.
+
+**Read the plan before applying.** Treat anything reported as *must be replaced* or *will be destroyed* as a stop sign — particularly the Cloud SQL instance. The [two-stage apply](#usage) still applies.
+
+### 4. Afterwards
+
+The Bitnami ClickHouse and ZooKeeper PVCs from the old deployment are retained on purpose, so they survive the migration and keep costing money. Delete them once you have confirmed the new deployment works.
+
+If you are not ready for any of this, pin the module to `0.3.x`.
 
 ## Additional Environment Variables
 
