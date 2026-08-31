@@ -23,11 +23,11 @@ module "langfuse" {
   cache_memory_size_gb = 1
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "2.0.1"
+  langfuse_chart_version = "2.0.2"
 
   # Optional: Pin the Langfuse application version (defaults to the latest
   # release at the time this module version was published)
-  app_version = "4.17.0"
+  app_version = "4.24.0"
 }
 
 provider "kubernetes" {

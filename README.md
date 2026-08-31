@@ -24,7 +24,7 @@ This module aims to provide a production-ready, secure, and scalable deployment 
 
 ```hcl
 module "langfuse" {
-  source = "github.com/langfuse/langfuse-terraform-gcp?ref=1.0.2"
+  source = "github.com/langfuse/langfuse-terraform-gcp?ref=1.0.3"
 
   domain = "langfuse.example.com"
 
@@ -36,11 +36,11 @@ module "langfuse" {
   subnetwork_cidr = "10.0.0.0/16"
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "2.0.1"
+  langfuse_chart_version = "2.0.2"
 
   # Optional: Pin the Langfuse application version. Defaults to the latest
   # release at the time this module version was published.
-  app_version = "4.17.0"
+  app_version = "4.24.0"
 }
 
 provider "kubernetes" {
@@ -126,7 +126,7 @@ The module deploys the Langfuse Helm chart v2 (`langfuse_chart_version`), which 
 ```hcl
 module "langfuse" {
   # ...
-  app_version = "4.17.0"
+  app_version = "4.24.0"
 }
 ```
 
@@ -162,7 +162,7 @@ Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node d
 
 ### Migrating from module versions <= 0.3.x
 
-This module version is a **clean Langfuse v4 installation based on v2.0.1 of the Langfuse Helm chart**. It does not migrate existing deployments.
+This module version is a **clean Langfuse v4 installation based on v2.0.2 of the Langfuse Helm chart**. It does not migrate existing deployments.
 
 Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. If you upgrade an existing installation, you must perform the migration steps **manually, outside of Terraform**, before switching the module version:
 
@@ -292,8 +292,8 @@ module "langfuse" {
 | cert_manager_chart_version          | Version of the cert-manager Helm chart. cert-manager issues the certificates for the ClickHouse operator admission webhooks.                                                                              | string       | "v1.20.2"               |    no    |
 | external_clickhouse                 | Use an external ClickHouse deployment (e.g. ClickHouse Cloud) instead of deploying ClickHouse into the GKE cluster. See [External ClickHouse](#external-clickhouse-bring-your-own).                       | object       | null                    |    no    |
 | external_clickhouse_password        | Password for the external ClickHouse user. Required when external_clickhouse is set.                                                                                                                      | string       | ""                      |    no    |
-| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "2.0.1"                 |    no    |
-| app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.17.0"                |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "2.0.2"                 |    no    |
+| app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.24.0"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
 | create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
 | provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
