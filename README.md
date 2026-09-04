@@ -134,6 +134,9 @@ module "langfuse" {
 
 By default the Langfuse Helm chart v2 deploys a ClickHouse cluster into the GKE cluster through the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) (`ClickHouseCluster` and `KeeperCluster` resources). To support this, the module installs:
 
+> [!IMPORTANT]
+> PostgreSQL and ClickHouse must both use UTC. If you adapt the managed PostgreSQL setup or connect an external ClickHouse instance, verify its timezone before deploying. See the [timezone configuration guide](https://langfuse.com/faq/all/self-hosting-timezone-errors) for details.
+
 - [cert-manager](https://cert-manager.io/) (required by the operator to issue its admission webhook certificates)
 - The ClickHouse operator (`oci://ghcr.io/clickhouse/clickhouse-operator-helm`)
 
