@@ -255,3 +255,14 @@ variable "postgres_version" {
   type        = string
   default     = "POSTGRES_16"
 }
+
+variable "gcs_events_retention_days" {
+  description = "Days to keep raw event objects under the events/ prefix before GCS deletes them. Set to 0 to disable automatic deletion. Media and batch exports are unaffected."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.gcs_events_retention_days >= 0
+    error_message = "gcs_events_retention_days must be greater than or equal to 0."
+  }
+}

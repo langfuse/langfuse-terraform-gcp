@@ -13,6 +13,19 @@ resource "google_storage_bucket" "langfuse" {
   versioning {
     enabled = true
   }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.gcs_events_retention_days > 0 ? [1] : []
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        age = var.gcs_events_retention_days
+        matches_prefix = ["events/"]
+      }
+    }
+  }
 }
 
 # Allow all access on bucket for langfuse user
