@@ -13,6 +13,32 @@ resource "google_storage_bucket" "langfuse" {
   versioning {
     enabled = true
   }
+
+  # Retention (see var.retention_days). The bucket is versioned, so deleting a live object only turns it
+  # into a noncurrent version: the second rule removes those so space is actually released.
+  dynamic "lifecycle_rule" {
+    for_each = var.retention_days == null ? [] : [1]
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        age = var.retention_days
+      }
+    }
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.retention_days == null ? [] : [1]
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        days_since_noncurrent_time = 1
+      }
+    }
+  }
 }
 
 # Allow all access on bucket for langfuse user
