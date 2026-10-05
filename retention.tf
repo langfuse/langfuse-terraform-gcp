@@ -1,15 +1,7 @@
-# Data retention (var.retention_days). The bucket lifecycle rules live in storage.tf.
-#
-# Order matters: Postgres rows are deleted one day before the bucket objects expire. If a row were deleted
-# after its object, a new upload of the same file would find the row, skip the upload (Langfuse
-# deduplicates media by content hash) and point at a missing object.
-
 locals {
   retention_enabled = var.retention_days != null
 }
 
-# ClickHouse: Langfuse creates its tables itself on startup, so a Job applies the TTL once they exist.
-# MODIFY TTL is idempotent. Changing retention_days replaces the Job and applies the new value.
 resource "kubernetes_job_v1" "clickhouse_retention" {
   count = local.retention_enabled && local.deploy_clickhouse ? 1 : 0
 
@@ -53,7 +45,6 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
 
           command = ["bash", "-c", <<-EOT
             set -eu
-            # The Helm release is named "langfuse", so the chart exposes this headless service.
             ch() { clickhouse-client --host langfuse-clickhouse-headless --user default --password "$CLICKHOUSE_PASSWORD" "$@"; }
             n=0
             for i in $(seq 1 60); do
@@ -82,9 +73,7 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
   depends_on = [helm_release.langfuse]
 }
 
-# Postgres has no TTL. Langfuse keeps one row per media file (media), per link to a trace or observation
-# (trace_media, observation_media) and one per session (trace_sessions). None of them has a foreign key to
-# the others, so they can be deleted independently. audit_logs is deliberately left alone.
+
 resource "kubernetes_cron_job_v1" "postgres_retention" {
   count = local.retention_enabled ? 1 : 0
 
@@ -145,7 +134,6 @@ resource "kubernetes_cron_job_v1" "postgres_retention" {
                   }
                 }
               }
-              # One day less than the bucket, see the note at the top of this file.
               env {
                 name  = "ROW_RETENTION_DAYS"
                 value = tostring(var.retention_days - 1)
