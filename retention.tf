@@ -37,8 +37,9 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
             name = "CLICKHOUSE_PASSWORD"
             value_from {
               secret_key_ref {
-                name = kubernetes_secret.langfuse.metadata[0].name
-                key  = "clickhouse-password"
+                name     = kubernetes_secret.langfuse.metadata[0].name
+                key      = "clickhouse-password"
+                optional = false
               }
             }
           }
@@ -71,6 +72,17 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
   }
 
   depends_on = [helm_release.langfuse]
+
+  # GKE Autopilot adds these fields on admission; without ignoring them every plan wants to replace the Job.
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].container[0].resources,
+    ]
+  }
 }
 
 
@@ -129,8 +141,9 @@ resource "kubernetes_cron_job_v1" "postgres_retention" {
                 name = "PGPASSWORD"
                 value_from {
                   secret_key_ref {
-                    name = kubernetes_secret.langfuse.metadata[0].name
-                    key  = "postgres-password"
+                    name     = kubernetes_secret.langfuse.metadata[0].name
+                    key      = "postgres-password"
+                    optional = false
                   }
                 }
               }
@@ -157,4 +170,14 @@ resource "kubernetes_cron_job_v1" "postgres_retention" {
   }
 
   depends_on = [helm_release.langfuse]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations,
+      spec[0].job_template[0].spec[0].template[0].spec[0].security_context,
+      spec[0].job_template[0].spec[0].template[0].spec[0].toleration,
+      spec[0].job_template[0].spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].job_template[0].spec[0].template[0].spec[0].container[0].resources,
+    ]
+  }
 }
