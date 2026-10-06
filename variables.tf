@@ -9,6 +9,12 @@ variable "domain" {
   type        = string
 }
 
+variable "bucket_name" {
+  description = "Name of the bucket. Defaults to the domain with dots as dashes plus the name, so changing the domain would replace the bucket."
+  type        = string
+  default     = null
+}
+
 variable "use_encryption_key" {
   description = "Whether or not to use an Encryption key for LLM API credential and integration credential store"
   type        = bool

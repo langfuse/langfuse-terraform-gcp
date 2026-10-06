@@ -4,7 +4,7 @@ locals {
 }
 
 resource "google_storage_bucket" "langfuse" {
-  name                        = "${local.bucket_prefix}-${var.name}"
+  name                        = coalesce(var.bucket_name, "${local.bucket_prefix}-${var.name}")
   location                    = data.google_client_config.current.region
   force_destroy               = !var.deletion_protection
   uniform_bucket_level_access = true
