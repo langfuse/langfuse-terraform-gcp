@@ -34,6 +34,10 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
             value = tostring(var.retention_days)
           }
           env {
+            name  = "V4_TABLES"
+            value = tonumber(split(".", var.app_version)[0]) >= 4 ? "1" : "0"
+          }
+          env {
             name = "CLICKHOUSE_PASSWORD"
             value_from {
               secret_key_ref {
@@ -58,6 +62,15 @@ resource "kubernetes_job_v1" "clickhouse_retention" {
             ch --query "ALTER TABLE observations         MODIFY TTL toDateTime(start_time) + toIntervalDay($RETENTION_DAYS)"
             ch --query "ALTER TABLE scores               MODIFY TTL toDateTime(timestamp)  + toIntervalDay($RETENTION_DAYS)"
             ch --query "ALTER TABLE blob_storage_file_log MODIFY TTL toDateTime(created_at) + toIntervalDay($RETENTION_DAYS)"
+            if [ "$V4_TABLES" = "1" ]; then
+              for t in events_core events_full; do
+                for i in $(seq 1 60); do
+                  [ "$(ch --query "EXISTS TABLE $t")" = "1" ] && break
+                  echo "waiting for $t"; sleep 10
+                done
+                ch --query "ALTER TABLE $t MODIFY TTL toDateTime(start_time) + toIntervalDay($RETENTION_DAYS)"
+              done
+            fi
           EOT
           ]
         }
