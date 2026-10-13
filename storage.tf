@@ -4,7 +4,7 @@ locals {
 }
 
 resource "google_storage_bucket" "langfuse" {
-  name                        = "${local.bucket_prefix}-${var.name}"
+  name                        = coalesce(var.bucket_name, "${local.bucket_prefix}-${var.name}")
   location                    = data.google_client_config.current.region
   force_destroy               = !var.deletion_protection
   uniform_bucket_level_access = true
@@ -12,6 +12,30 @@ resource "google_storage_bucket" "langfuse" {
 
   versioning {
     enabled = true
+  }
+  
+  dynamic "lifecycle_rule" {
+    for_each = var.retention_days == null ? [] : [1]
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        age = var.retention_days
+      }
+    }
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.retention_days == null ? [] : [1]
+    content {
+      action {
+        type = "Delete"
+      }
+      condition {
+        days_since_noncurrent_time = 1
+      }
+    }
   }
 }
 
