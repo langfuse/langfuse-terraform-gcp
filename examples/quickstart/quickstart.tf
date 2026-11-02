@@ -23,7 +23,7 @@ module "langfuse" {
   cache_memory_size_gb = 1
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "2.2.0"
+  langfuse_chart_version = "2.2.1"
 
   # Optional: Pin the Langfuse application version (defaults to the latest
   # release at the time this module version was published)
