@@ -9,6 +9,12 @@ variable "domain" {
   type        = string
 }
 
+variable "bucket_name" {
+  description = "Name of the bucket. Defaults to the domain with dots as dashes plus the name, so changing the domain would replace the bucket."
+  type        = string
+  default     = null
+}
+
 variable "use_encryption_key" {
   description = "Whether or not to use an Encryption key for LLM API credential and integration credential store"
   type        = bool
@@ -254,4 +260,33 @@ variable "postgres_version" {
   description = "Version of PostgreSQL to use for the database instance"
   type        = string
   default     = "POSTGRES_16"
+}
+
+variable "retention_days" {
+  description = "Keep Langfuse data for this many days (null keeps everything). Sets a lifecycle rule on the bucket (events, media and exports), a TTL on the ClickHouse tables traces, observations, scores and blob_storage_file_log (applied by a Job; only when ClickHouse is deployed in-cluster), and a daily CronJob that deletes older rows of media, observation_media, trace_media and trace_sessions in Postgres. Open source Langfuse has no built-in retention (project data retention is Enterprise only). Media linked to dataset items is not protected. Minimum 2."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.retention_days == null ? true : var.retention_days >= 2
+    error_message = "retention_days must be at least 2 (or null to keep everything)."
+  }
+}
+
+variable "retention_postgres_schedule" {
+  description = "Cron schedule (UTC) of the Postgres retention CronJob. Only used when retention_days is set."
+  type        = string
+  default     = "17 3 * * *"
+}
+
+variable "retention_clickhouse_image" {
+  description = "Image with clickhouse-client used by the ClickHouse retention Job. Keep it close to the ClickHouse server version of the Langfuse Helm chart."
+  type        = string
+  default     = "clickhouse/clickhouse-server:26.4"
+}
+
+variable "retention_postgres_image" {
+  description = "Image with psql used by the Postgres retention CronJob."
+  type        = string
+  default     = "postgres:16-alpine"
 }
