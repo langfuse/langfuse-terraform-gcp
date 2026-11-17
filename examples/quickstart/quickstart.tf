@@ -27,7 +27,7 @@ module "langfuse" {
 
   # Optional: Pin the Langfuse application version (defaults to the latest
   # release at the time this module version was published)
-  app_version = "4.77.0"
+  app_version = "4.80.0"
 }
 
 provider "kubernetes" {
