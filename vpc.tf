@@ -77,3 +77,9 @@ resource "google_compute_global_address" "ingress" {
   count = var.provision_static_ip ? 1 : 0
   name  = "${var.name}-ingress-ip"
 }
+
+# Static External IP for AI Gateway Ingress
+resource "google_compute_global_address" "gateway_ingress" {
+  count = var.enable_ai_gateway && var.provision_static_ip ? 1 : 0
+  name  = "${var.name}-gateway-ingress-ip"
+}

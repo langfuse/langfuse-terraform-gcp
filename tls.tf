@@ -20,6 +20,16 @@ resource "google_compute_ssl_certificate" "custom" {
   }
 }
 
+# Dedicated Google-managed SSL certificate for the AI gateway domain
+resource "google_compute_managed_ssl_certificate" "gateway" {
+  count = local.create_gateway_managed_ssl_cert ? 1 : 0
+  name  = "${var.name}-gateway"
+
+  managed {
+    domains = [local.gateway_domain]
+  }
+}
+
 # Frontend config for HTTPs redirect
 resource "kubernetes_manifest" "https_redirect" {
   manifest = {
@@ -33,6 +43,28 @@ resource "kubernetes_manifest" "https_redirect" {
       "redirectToHttps" = {
         enabled          = "true"
         responseCodeName = "PERMANENT_REDIRECT"
+      }
+    }
+  }
+}
+
+# BackendConfig for the AI gateway Service: raises the default 30s GKE load
+# balancer backend timeout to 620s (for streams up to 600s) and probes /ready.
+resource "kubernetes_manifest" "gateway_backend_config" {
+  count = var.enable_ai_gateway ? 1 : 0
+
+  manifest = {
+    "apiVersion" = "cloud.google.com/v1"
+    "kind"       = "BackendConfig"
+    "metadata" = {
+      "name"      = "langfuse-gateway"
+      "namespace" = kubernetes_namespace.langfuse.metadata[0].name
+    }
+    "spec" = {
+      "timeoutSec" = 620
+      "healthCheck" = {
+        "requestPath" = "/ready"
+        "type"        = "HTTP"
       }
     }
   }
