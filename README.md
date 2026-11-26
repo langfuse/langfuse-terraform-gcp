@@ -5,7 +5,7 @@
 This repository contains a Terraform module for deploying [Langfuse](https://langfuse.com/) - the open-source LLM observability platform - on GCP.
 This module aims to provide a production-ready, secure, and scalable deployment using managed services whenever possible.
 
-![gcp-architecture](https://github.com/user-attachments/assets/a8fb739f-1757-451e-9808-e77ebfa2d334)
+![gcp-architecture](./images/gcp-architecture.svg)
 
 
 ## Usage
@@ -36,11 +36,15 @@ module "langfuse" {
   subnetwork_cidr = "10.0.0.0/16"
 
   # Optional: Configure the Langfuse Helm chart version
-  langfuse_chart_version = "2.2.5"
+  langfuse_chart_version = "2.3.0"
 
   # Optional: Pin the Langfuse application version. Defaults to the latest
   # release at the time this module version was published.
   app_version = "4.83.0"
+
+  # Optional: Deploy the Langfuse AI gateway on gateway.<domain> (dedicated Ingress)
+  # enable_ai_gateway = true
+  # gateway_domain    = "gateway.langfuse.example.com" # Defaults to gateway.<domain>
 }
 
 provider "kubernetes" {
@@ -116,6 +120,7 @@ This module creates a complete Langfuse stack with the following components:
 - ClickHouse cluster managed by the official [ClickHouse Kubernetes operator](https://github.com/ClickHouse/clickhouse-operator) (including ClickHouse Keeper and cert-manager), or optionally an external ClickHouse such as ClickHouse Cloud
 - TLS certificates and Cloud DNS configuration
 - Required IAM roles and firewall rules
+- Optional Langfuse AI gateway behind a dedicated GKE Ingress
 - GKE Ingress Controller for ingress
 - Filestore CSI Driver for persistent storage
 
@@ -165,7 +170,7 @@ Set `cluster_enabled = false` for ClickHouse Cloud on Azure or for single-node d
 
 ### Migrating from module versions <= 0.3.x
 
-This module version is a **clean Langfuse v4 installation based on v2.2.5 of the Langfuse Helm chart**. It does not migrate existing deployments.
+This module version is a **clean Langfuse v4 installation based on v2.3.0 of the Langfuse Helm chart**. It does not migrate existing deployments.
 
 Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm chart v1, which ran ClickHouse (and ZooKeeper) as a Bitnami subchart. The operator-managed ClickHouse starts empty, and the Helm chart refuses a raw in-place `helm upgrade` that would replace leftover Bitnami volumes. If you upgrade an existing installation, you must perform the migration steps **manually, outside of Terraform**, before switching the module version:
 
@@ -173,6 +178,29 @@ Earlier versions of this module deployed Langfuse v3 with the Bitnami-based Helm
 2. Upgrade the application following the [Langfuse v3 → v4 upgrade guide](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4).
 
 New installations are unaffected. If you need to stay on the Bitnami-based deployment for now, pin this module to `0.3.x`.
+
+## AI Gateway
+
+Set `enable_ai_gateway = true` to deploy the Langfuse AI gateway alongside Langfuse (off by default, requires Helm chart `>= 2.3`).
+
+```hcl
+module "langfuse" {
+  # ...
+  enable_ai_gateway = true
+
+  # Optional: defaults to gateway.<domain>
+  # gateway_domain = "llm.langfuse.example.com"
+}
+```
+
+When enabled, the module:
+
+- Enables `langfuse.gateway` and its Kubernetes Ingress in the Langfuse Helm chart on `gateway_domain` (`gateway.<domain>` by default).
+- Provisions a dedicated GKE Ingress (separate from web's Ingress so web keeps its default backend timeout) with a `BackendConfig` setting a 620s backend timeout (to accommodate streaming responses up to 600s) and `/ready` health checks, plus the same `https-redirect` `FrontendConfig` as web.
+- Mounts the Memorystore private CA certificate into the gateway pod (`SSL_CERT_DIR` alongside the system CA bundle in `SSL_CERT_FILE`) so the gateway trusts both Memorystore (`rediss://`) for spend limits and public LLM provider APIs.
+- Creates a dedicated Google-managed SSL certificate for `gateway_domain` (leaving web's certificate untouched) and, when `create_dns_zone = true`, a Cloud DNS A record pointing `gateway_domain` at the gateway load balancer.
+
+When `create_dns_zone = false`, point your external DNS A record for `gateway_domain` at the `gateway_ingress_ip` output. To supply an existing GCP SSL certificate for the gateway instead of a Google-managed certificate, set `gateway_ssl_certificate_name` (or reuse a wildcard `ssl_certificate_name` / `ssl_certificate_body` that also covers `gateway_domain`).
 
 ## Additional Environment Variables
 
@@ -295,14 +323,17 @@ module "langfuse" {
 | cert_manager_chart_version          | Version of the cert-manager Helm chart. cert-manager issues the certificates for the ClickHouse operator admission webhooks.                                                                              | string       | "v1.20.2"               |    no    |
 | external_clickhouse                 | Use an external ClickHouse deployment (e.g. ClickHouse Cloud) instead of deploying ClickHouse into the GKE cluster. See [External ClickHouse](#external-clickhouse-bring-your-own).                       | object       | null                    |    no    |
 | external_clickhouse_password        | Password for the external ClickHouse user. Required when external_clickhouse is set.                                                                                                                      | string       | ""                      |    no    |
-| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy                                                                                                                                                              | string       | "2.2.5"                 |    no    |
+| langfuse_chart_version              | Version of the Langfuse Helm chart to deploy; AI gateway needs `>= 2.3`                                                                                                                                   | string       | "2.3.0"                 |    no    |
 | app_version                         | Langfuse application version (Docker image tag) to deploy. Defaults to the latest Langfuse release at the time this module version was published.                                                          | string       | "4.83.0"                |    no    |
 | additional_env                      | Additional environment variables to add to the Langfuse container. Supports both direct values and Kubernetes valueFrom references (secrets, configMaps). See examples/additional-env for usage examples. | list(object) | []                      |    no    |
-| create_dns_zone                     | Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally.                                                                                                           | bool         | true                    |    no    |
-| provision_static_ip                 | Whether to provision a static global IP for the Ingress. Set to `true` if you need a stable IP for DNS configuration before deployment.                                                                   | bool         | false                   |    no    |
-| ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped.                                                            | string       | ""                      |    no    |
-| ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally.                                                                                                | string       | ""                      |    no    |
+| create_dns_zone                     | Whether to create a Google Cloud DNS managed zone and A records (for `domain` and, when `enable_ai_gateway` is true, `gateway_domain`). Set to `false` if you manage DNS externally.                      | bool         | true                    |    no    |
+| provision_static_ip                 | Whether to provision static global IPs for the Ingresses (including a dedicated static IP for the AI gateway Ingress when `enable_ai_gateway` is true). Set to `true` for stable IPs before deployment.   | bool         | false                   |    no    |
+| ssl_certificate_name                | Name of an existing SSL certificate (e.g. created via `google_compute_ssl_certificate`). If provided, managed certificate creation is skipped. Must also cover `gateway_domain` if `enable_ai_gateway` is true and `gateway_ssl_certificate_name` is unset. | string | "" | no |
+| ssl_certificate_body                | Content of the SSL certificate (public key). Used to create a `google_compute_ssl_certificate` internally. Must also cover `gateway_domain` if `enable_ai_gateway` is true and `gateway_ssl_certificate_name` is unset. | string | "" | no |
 | ssl_certificate_private_key         | Content of the SSL certificate private key. Used to create a `google_compute_ssl_certificate` internally.                                                                                                 | string       | ""                      |    no    |
+| enable_ai_gateway                   | Deploy the Langfuse AI gateway behind a dedicated GKE Ingress on `gateway_domain` with its own Google-managed SSL certificate and Cloud DNS A record (when `create_dns_zone` is true). Requires Helm chart `>= 2.3`. | bool | false | no |
+| gateway_domain                      | Domain name for the Langfuse AI gateway; defaults to `gateway.<domain>`                                                                                                                                   | string       | null                    |    no    |
+| gateway_ssl_certificate_name        | Name of an existing GCP SSL certificate for `gateway_domain` when `enable_ai_gateway` is true. Falls back to `ssl_certificate_name` or `ssl_certificate_body` if configured; otherwise a Google-managed certificate is created. | string | "" | no |
 
 ## Custom SSL & Static IP
 
@@ -335,6 +366,10 @@ module "langfuse" {
   source = "github.com/langfuse/langfuse-terraform-gcp"
   # ...
   ssl_certificate_name = google_compute_ssl_certificate.my_cert.name
+
+  # Optional: supply a separate existing certificate for gateway_domain when
+  # enable_ai_gateway = true (defaults to ssl_certificate_name if unset)
+  # gateway_ssl_certificate_name = google_compute_ssl_certificate.my_gateway_cert.name
 }
 ```
 
@@ -349,12 +384,12 @@ If you need a static IP address for your A-record *before* deploying the full st
     }
     ```
 
-2.  Run a targeted apply to create just the IP:
+2.  Run a targeted apply to create just the IP (add `-target=module.langfuse.google_compute_global_address.gateway_ingress` when `enable_ai_gateway = true`):
     ```bash
     terraform apply -target=module.langfuse.google_compute_global_address.ingress
     ```
 
-3.  Get the IP address from the output:
+3.  Get the IP address from the output (and `terraform output gateway_ingress_ip` when `enable_ai_gateway = true`):
     ```bash
     terraform output ingress_ip
     ```
@@ -374,7 +409,9 @@ If you need a static IP address for your A-record *before* deploying the full st
 | cluster_host           | GKE Cluster endpoint             |
 | cluster_ca_certificate | GKE Cluster CA certificate       |
 | cluster_token          | GKE Cluster authentication token |
-| ingress_ip             | Static IP address of the Ingress   |
+| ingress_ip             | Static IP address of the Ingress                                                               |
+| gateway_url            | Public HTTPS URL of the Langfuse AI gateway (null when disabled)                               |
+| gateway_ingress_ip     | External IP address of the AI gateway Ingress (static or load balancer IP; null when disabled) |
 
 ## Contributing
 

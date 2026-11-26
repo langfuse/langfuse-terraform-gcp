@@ -156,6 +156,50 @@ langfuse:
       name: ${kubernetes_secret.langfuse.metadata[0].name}
       key: encryption_key
 EOT
+
+  # Dedicated GKE Ingress for the AI gateway so web keeps its default load
+  # balancer timeout. The attached BackendConfig sets a 620s backend timeout
+  # (for streams up to 600s) and /ready health checks. Memorystore uses a
+  # private Google-managed CA, so mount it via SSL_CERT_DIR alongside the UBI9
+  # system CA bundle in SSL_CERT_FILE so the Rust gateway trusts both
+  # Memorystore (rediss://) and public LLM provider endpoints.
+  gateway_values = !var.enable_ai_gateway ? "" : <<EOT
+langfuse:
+  gateway:
+    enabled: true
+    pod:
+      additionalEnv:
+        - name: SSL_CERT_FILE
+          value: /etc/pki/tls/certs/ca-bundle.crt
+        - name: SSL_CERT_DIR
+          value: /var/run/secrets/redis-ca
+      extraVolumeMounts:
+        - name: redis-certificate
+          mountPath: /var/run/secrets/redis-ca
+          readOnly: true
+      extraVolumes:
+        - name: redis-certificate
+          secret:
+            secretName: ${kubernetes_secret.langfuse.metadata[0].name}
+            items:
+              - key: redis-certificate
+                path: redis-ca.crt
+    service:
+      annotations:
+        cloud.google.com/backend-config: '{"default": "langfuse-gateway"}'
+    ingress:
+      enabled: true
+      className: gce
+      annotations:
+        kubernetes.io/ingress.class: gce
+%{if var.provision_static_ip~}
+        kubernetes.io/ingress.global-static-ip-name: ${google_compute_global_address.gateway_ingress[0].name}
+%{endif~}
+        ingress.gcp.kubernetes.io/pre-shared-cert: ${local.gateway_ssl_certificate_name}
+        networking.gke.io/v1beta1.FrontendConfig: https-redirect
+      hosts:
+        - ${jsonencode(local.gateway_domain)}
+EOT
 }
 
 # Service account for workload identity
@@ -229,6 +273,7 @@ resource "helm_release" "langfuse" {
     local.langfuse_values,
     local.clickhouse_values,
     local.ingress_values,
+    local.gateway_values,
     local.encryption_values,
   ], var.additional_helm_values)
 
@@ -236,12 +281,32 @@ resource "helm_release" "langfuse" {
     kubernetes_secret.langfuse,
     google_service_account.langfuse,
     helm_release.clickhouse_operator,
+    kubernetes_manifest.gateway_backend_config,
   ]
 
   lifecycle {
     precondition {
       condition     = var.external_clickhouse == null || var.external_clickhouse_password != ""
       error_message = "external_clickhouse_password must be set when external_clickhouse is configured."
+    }
+
+    precondition {
+      condition = !var.enable_ai_gateway ? true : (
+        try(tonumber(regex("^(\\d+)\\.(\\d+)", var.langfuse_chart_version)[0]), 99) > 2 ||
+        (try(tonumber(regex("^(\\d+)\\.(\\d+)", var.langfuse_chart_version)[0]), 99) == 2 &&
+        try(tonumber(regex("^(\\d+)\\.(\\d+)", var.langfuse_chart_version)[1]), 99) >= 3)
+      )
+      error_message = "The AI gateway needs langfuse_chart_version >= 2.3, which wires Redis for spend limits into langfuse.gateway.*. Helm ignores unknown values silently, so an older chart would deploy without gateway Redis or without the gateway."
+    }
+
+    precondition {
+      condition     = !var.enable_ai_gateway ? true : lower(local.gateway_domain) != lower(var.domain)
+      error_message = "gateway_domain must be different from domain."
+    }
+
+    precondition {
+      condition     = !var.enable_ai_gateway || !var.create_dns_zone ? true : endswith(lower(local.gateway_domain), ".${lower(var.domain)}")
+      error_message = "gateway_domain must be a subdomain of domain when create_dns_zone is true, because the module creates DNS records in the Cloud DNS zone for domain. Set create_dns_zone = false to use a different domain."
     }
   }
 

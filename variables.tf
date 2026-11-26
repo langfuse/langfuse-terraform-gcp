@@ -171,9 +171,9 @@ variable "external_clickhouse_password" {
 }
 
 variable "langfuse_chart_version" {
-  description = "Version of the Langfuse Helm chart to deploy"
+  description = "Version of the Langfuse Helm chart to deploy. The AI gateway needs >= 2.3 (written without a patch component so update-langfuse-versions.yml does not rewrite the floor), which wires Redis for spend limits into langfuse.gateway.*."
   type        = string
-  default     = "2.2.5"
+  default     = "2.3.0"
 }
 
 variable "app_version" {
@@ -220,19 +220,19 @@ variable "additional_env" {
 }
 
 variable "create_dns_zone" {
-  description = "Whether to create a Google Cloud DNS managed zone. Set to `false` if you manage DNS externally."
+  description = "Whether to create a Google Cloud DNS managed zone and A records (for domain and, when enable_ai_gateway is true, gateway_domain). Set to `false` if you manage DNS externally."
   type        = bool
   default     = true
 }
 
 variable "ssl_certificate_name" {
-  description = "Name of an existing SSL certificate to use. If not provided, a managed certificate will be created."
+  description = "Name of an existing SSL certificate to use. If not provided, a managed certificate will be created. When enable_ai_gateway is true and gateway_ssl_certificate_name is unset, this certificate is also used for gateway_domain and must cover it."
   type        = string
   default     = ""
 }
 
 variable "ssl_certificate_body" {
-  description = "Content of the SSL certificate (public key)"
+  description = "Content of the SSL certificate (public key). When enable_ai_gateway is true and gateway_ssl_certificate_name is unset, this certificate is also used for gateway_domain and must cover it."
   type        = string
   default     = ""
 }
@@ -245,9 +245,35 @@ variable "ssl_certificate_private_key" {
 }
 
 variable "provision_static_ip" {
-  description = "Whether to provision a static global IP for the Ingress. Set to true if you need a stable IP for DNS configuration before deployment."
+  description = "Whether to provision static global IPs for the Ingresses (and a dedicated static IP for the AI gateway Ingress when enable_ai_gateway is true). Set to true if you need stable IPs for DNS configuration before deployment."
   type        = bool
   default     = false
+}
+
+# AI gateway
+variable "enable_ai_gateway" {
+  description = "Deploy the Langfuse AI gateway behind a dedicated GKE Ingress on gateway_domain with its own Google-managed SSL certificate and Cloud DNS A record (when create_dns_zone is true). Requires langfuse_chart_version >= 2.3."
+  type        = bool
+  default     = false
+}
+
+variable "gateway_domain" {
+  description = "Domain name for the Langfuse AI gateway. Defaults to gateway.<domain>. When create_dns_zone is true, this must be a subdomain of domain so its A record can be created in the module's Cloud DNS zone."
+  type        = string
+  default     = null
+
+  validation {
+    # Ternary instead of ||: Terraform 1.3 does not short-circuit logical
+    # operators, so trimspace() on the null default would error.
+    condition     = var.gateway_domain == null ? true : trimspace(var.gateway_domain) != ""
+    error_message = "gateway_domain must be a non-empty hostname."
+  }
+}
+
+variable "gateway_ssl_certificate_name" {
+  description = "Name of an existing GCP SSL certificate for gateway_domain when enable_ai_gateway is true. If unset, falls back to ssl_certificate_name or ssl_certificate_body if configured; otherwise a dedicated Google-managed SSL certificate is created for gateway_domain."
+  type        = string
+  default     = ""
 }
 
 variable "postgres_version" {
